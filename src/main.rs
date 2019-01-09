@@ -15,8 +15,10 @@ extern crate rayon;
 
 mod smooth_density_graph;
 mod io;
+mod clustering;
 
 use io::Parameters;
+use clustering::Cluster;
 use smooth_density_graph::Graph;
 use io::write_vec;
 
@@ -25,6 +27,8 @@ fn main() {
     let mut arg_iter = env::args();
 
     let mut parameters_raw = Parameters::read(&mut arg_iter);
+
+    let distance = parameters_raw.distance;
 
     let mut distance_matrix = parameters_raw.distance_matrix.take();
 
@@ -38,9 +42,16 @@ fn main() {
     let mut graph = Graph::new(counts,parameters_raw);
 
     graph.connect();
-    let labels = Graph::wanderlust(graph);
-    eprintln!("Wanderlust:{:?}",labels);
-    write_vec(labels,&None);
+
+    let densities = graph.smooth_densities();
+
+    write_vec(densities, &None);
+
+    // let labels = vec![Graph::wandernode(0,graph)];
+    // let (final_positions,fuzz) = Graph::wanderlust(graph);
+    // let labels = Cluster::quick_cluster(final_positions,fuzz,distance);
+    // eprintln!("Wanderlust:{:?}",labels.iter().enumerate().collect::<Vec<(usize,&usize)>>());
+    // write_vec(labels,&None);
 }
 
 #[cfg(test)]
@@ -52,7 +63,7 @@ mod tests {
 
     pub fn example_graph() -> Graph {
         let a = (0..100).map(|x| x as f64).collect();
-        let mut p = Parameters::from_vec((10,10), a, 3, 5);
+        let mut p = Parameters::from_vec((25,4), a, 3, 5);
         let points = p.counts.clone().unwrap();
         p.distance_matrix = Some(p.distance.matrix(p.counts.take().unwrap().view()));
         let mut graph = Graph::new(points,p);
@@ -87,8 +98,9 @@ mod tests {
     #[test]
     pub fn wanderlust() {
         let graph = example_graph();
-        eprintln!("{:?}",Graph::wanderlust(graph));
-        panic!();
+        let (final_positions,fuzz) = Graph::wanderlust(graph);
+        Cluster::quick_cluster(final_positions, fuzz, Distance::Cosine);
+        // panic!();
     }
 
 

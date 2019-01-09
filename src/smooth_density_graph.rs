@@ -1,7 +1,8 @@
 use io::Distance;
+use io::{array_mean,vec_mean};
 use ndarray::{Array,Ix1,Ix2,Ix3,Zip,Axis,ArrayView,stack};
 use std::sync::Arc;
-use std::collections::{HashMap,VecDeque};
+use std::collections::{HashSet,HashMap,VecDeque};
 use io::Parameters;
 use rand::{Rng,thread_rng};
 use rand::rngs::ThreadRng;
@@ -9,25 +10,32 @@ use rand::seq::index::sample;
 use weighted_sampling::WBST;
 use std::hash::Hash;
 use std::cmp::Eq;
+use std::cmp::Ordering;
+
+use clustering::Cluster;
 
 #[derive(Debug)]
 struct Node {
     id: usize,
+    density: f64,
     coordinates: Array<f64,Ix1>,
     neighbors: Vec<usize>,
-    distances: Vec<f64>,
+    similarities: Vec<f64>,
     sampler: WBST<f64,usize>,
     parameters: Arc<Parameters>,
 }
+
+
 
 impl Node {
 
     pub fn new(id: usize, view: ArrayView<f64,Ix1>,parameters:Arc<Parameters>) -> Node {
         Node {
             id: id,
+            density: 0.,
             coordinates: view.to_owned(),
             neighbors: vec![],
-            distances: vec![],
+            similarities: vec![],
             sampler: WBST::empty(),
             parameters: parameters,
         }
@@ -36,24 +44,36 @@ impl Node {
     pub fn connect_subsampled(&mut self, subsampled_indecies: Vec<usize>, distances: Vec<f64>) {
         let nearest_indecies = k_max(self.parameters.k,&distances);
         let nearest_neighbors = nearest_indecies.iter().map(|i| subsampled_indecies[*i]).collect();
-        let mut nearest_distances: Vec<f64> = nearest_indecies.iter().map(|i| distances[*i]).collect();
-        for d in nearest_distances.iter_mut() {
-                *d = 1. / *d;
-                if d.is_nan() {
-                    *d = 0.
-                }
+        let mut nearest_similarities: Vec<f64> = nearest_indecies.iter().map(|i| distances[*i]).collect();
+        for d in nearest_similarities.iter_mut() {
+            if *d > 0.999999 {
+                *d = 0.
+            }
         }
-        self.sampler = WBST::<f64,usize>::index_tree(&nearest_distances);
+        self.sampler = WBST::<f64,usize>::index_tree(&nearest_similarities);
         self.neighbors = nearest_neighbors;
-        self.distances = nearest_distances;
+        self.similarities = nearest_similarities;
     }
 
     pub fn pick_a_neighbor(&self, rng: &mut ThreadRng) -> usize {
         let index = self.sampler.draw_replace_rng(rng).unwrap().1;
+        // eprintln!("SI:{:?}",index);
+        // eprintln!("SN:{:?}",self.neighbors[index]);
+        // eprintln!("SS:{:?}",self);
         self.neighbors[index]
     }
+
+    pub fn simple_density(&self) -> f64 {
+        vec_mean(&self.similarities)
+    }
+
+    pub fn set_simple_density(&mut self) {
+        self.density = self.simple_density();
+    }
+
 }
 
+#[derive(Debug)]
 pub struct Graph {
     arena: Vec<Node>,
     points: Arc<Array<f64,Ix2>>,
@@ -89,6 +109,20 @@ impl Graph {
         sample(&mut thread_rng(), self.len(), self.parameters.subsample).into_vec()
     }
 
+    pub fn smooth_density(&self, node:usize) -> f64 {
+        let mut densities = Vec::with_capacity(self.parameters.k);
+        for neighbor in &self.arena[node].neighbors {
+            densities.push(self.arena[*neighbor].density)
+        }
+        vec_mean(&densities)
+    }
+
+    pub fn subsample_neighbors(&self,origin:usize) -> (Vec<usize>, Vec<f64>) {
+        let indecies = self.subsampled_indices();
+        let distances = indecies.iter().map(|&j| self.distance_matrix[[origin,j]]).collect();
+        (indecies,distances)
+    }
+
     pub fn connectivity(&self) -> Array<bool,Ix2> {
         let mut connectivity = Array::default((self.arena.len(),self.arena.len()));
         connectivity.fill(false);
@@ -108,26 +142,67 @@ impl Graph {
         }
     }
 
+    pub fn smooth_densities(&mut self) -> Vec<f64> {
+        let mut smooth_densities = Array::zeros((self.points.shape()[0],10));
+        for i in 0..10 {
+            self.connect();
+            for node in self.arena.iter_mut() {
+                node.set_simple_density();
+            }
+            for node in 0..self.arena.len() {
+                smooth_densities[[node,i]] = self.smooth_density(node);
+            }
+        }
+        let very_smooth_densities = smooth_densities.mean_axis(Axis(1));
+        very_smooth_densities.to_vec()
+    }
+
     pub fn wandernode(node:usize,graph:Graph) -> usize {
         let graph_arc = Arc::new(graph);
         let mut wanderer = Wanderer::new(node, graph_arc);
         wanderer.wander()
     }
 
-    pub fn wanderlust(graph:Graph) -> Vec<usize> {
-        let graph_arc = Arc::new(graph);
-        (0..graph_arc.len())
-            .map(|node|
-                {
-                    let mut wanderer = Wanderer::new(node, graph_arc.clone());
-                    wanderer.wander()
-                }
-            )
-            .collect()
+    pub fn wanderlust(mut graph:Graph) -> (Array<f64,Ix2>,Array<f64,Ix1>) {
+        let mut final_nodes = Array::zeros((graph.len(),5));
+        let mut final_positions = Array::zeros((graph.points.shape()[0],graph.points.shape()[1]));
+        let mut final_fuzz = Array::zeros((graph.len(),5));
+        let mut buffer = Array::zeros((5,graph.points.shape()[1]));
+        for i in 0..5 {
+            graph.connect();
+            let graph_arc = Arc::new(graph);
+            for j in 0..graph_arc.len() {
+                let mut wanderer = Wanderer::new(j, graph_arc.clone());
+                final_nodes[[j,i]] = wanderer.wander();
+                final_fuzz[[j,i]] = wanderer.fuzz().unwrap().0;
+            }
+            let graph_opt = Arc::try_unwrap(graph_arc);
+            if let Ok(graph_unwrap) = graph_opt {
+                graph = graph_unwrap;
+            }
+            else {
+                panic!()
+            }
+        }
+        for (j,points) in final_nodes.axis_iter(Axis(0)).enumerate() {
+            for (i,point) in points.iter().enumerate() {
+                buffer.row_mut(i).assign(&graph.points.row(*point));
+            }
+            let final_position = buffer.mean_axis(Axis(0));
+            final_positions.row_mut(j).assign(&final_position);
+        }
+        let fuzz = final_fuzz.mean_axis(Axis(1));
+        (final_positions,fuzz)
+    }
+
+    pub fn distance(&self) -> Distance {
+        self.parameters.distance
     }
 
 }
 
+
+#[derive(Debug)]
 struct Wanderer {
     origin: usize,
     current_node: usize,
@@ -162,8 +237,18 @@ impl Wanderer {
     }
 
     pub fn converged(&self) -> bool {
+        if let Some((far,close)) = self.fuzz() {
+            if far/close < 2. {
+                true
+            }
+            else {false}
+        }
+        else {false}
+    }
+
+    pub fn fuzz(&self) -> Option<(f64,f64)> {
         if self.node_history.len() < 50 {
-            false
+            None
         }
         else {
             let current = self.graph.points.row(self.current_node);
@@ -171,12 +256,8 @@ impl Wanderer {
             let far = self.graph.points.row(self.node_history[0]);
             let close_distance = self.parameters.distance.measure(current,close);
             let far_distance = self.parameters.distance.measure(current,far);
-            if far_distance / close_distance < 2. {
-                true
-            }
-            else {false}
+            Some((far_distance,close_distance))
         }
-
     }
 
     pub fn wander(&mut self) -> usize {
@@ -184,11 +265,15 @@ impl Wanderer {
         let mut failcounter = 0;
         let mut rng = thread_rng();
         while !self.converged() {
+            // eprintln!("C:{:?}",self.current_node);
+            // eprintln!("N:{:?}",self.graph.arena[self.current_node].neighbors);
+            // eprintln!("D:{:?}",self.graph.arena[self.current_node].distances);
+            // eprintln!("D:{:?}",self.graph.arena[self.current_node].sampler);
             self.step(&mut rng);
             counter += 1;
-            if counter > 10000 {
-                if failcounter > 5 {
-                    eprintln!("{:?}",self.graph.distance_matrix);
+            if counter > 1000 {
+                if failcounter > 2 {
+                    eprintln!("{:?}",self.graph.arena);
                     eprintln!("{:?}",self.graph.arena[self.current_node]);
                     eprintln!("{:?}",self.node_history);
                     panic!("Not all who wander are lost, but I sure as fuck am");
@@ -198,18 +283,24 @@ impl Wanderer {
                 self.reset()
             }
         }
-        let counts = count_vec(self.node_history.iter().collect());
-        *counts.into_iter().max_by_key(|(k,c)| *c).unwrap().0
+        *mode(self.node_history.iter())
     }
+
 }
 
-fn count_vec<T:Hash + Eq>(vec:Vec<T>) -> HashMap<T,usize> {
+fn count_vec<'a,U: Iterator<Item=&'a T>,T:Hash + Eq>(mut collection: U) -> HashMap<&'a T,usize> {
     let mut map = HashMap::new();
-    for t in vec {
+    for t in collection {
         *map.entry(t).or_insert(0) += 1;
     }
     map
 }
+
+fn mode<'a,U: Iterator<Item=&'a T>,T:Hash + Eq + Clone>(collection:U) -> &'a T {
+    let map = count_vec(collection);
+    map.into_iter().max_by_key(|(k,c)| *c).unwrap().0
+}
+
 
 fn k_nearest_neighbors(center: ArrayView<f64,Ix1>,n: usize,points: Arc<Array<f64,Ix2>>,distance:Distance) -> Vec<(usize,f64)> {
 
@@ -262,6 +353,13 @@ fn k_max(k:usize,vec: &Vec<f64>) -> Vec<usize> {
         }
         if let Some(valid_index) = insert_index {
             queue.insert(valid_index,(i,*x));
+            insert_index = None;
+            if queue.len() > k {
+                queue.pop();
+            }
+            else if queue.len() < k {
+                    insert_index = Some(queue.len())
+            }
         }
     }
 
@@ -283,10 +381,14 @@ fn k_min(k:usize,vec: &Vec<f64>) -> Vec<usize> {
         if let Some(valid_index) = insert_index {
             queue.insert(valid_index,(i,*x));
         }
+        if queue.len() > k {
+            queue.pop();
+        }
     }
 
     queue.iter().map(|(x,y)| *x).collect()
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -294,7 +396,10 @@ mod tests {
     use super::*;
 
     #[test]
-    pub fn microtest() {
+    pub fn kmax() {
+
+        assert_eq!(vec![0,1,2],k_max(3,&vec![10.,9.,8.,7.,6.,5.,4.,3.,2.,1.,0.]));
+        assert_eq!(vec![4,5,6],k_max(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,2.,1.,0.]));
     }
 
 

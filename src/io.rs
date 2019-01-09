@@ -352,12 +352,12 @@ pub fn sanitize(mut input: Array<f64,Ix2>) -> Array<f64,Ix2> {
 
 pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let mut products = slice.dot(&slice.t());
-    eprintln!("Products");
+    // eprintln!("Products");
     let mut geo = (&slice * &slice).sum_axis(Axis(1));
     if geo.iter().any(|x| *x == 0.) {
         panic!("Unsanitized input, detected an all-0 feature (column), please use a different distance metric, or sanitize your input");
     }
-    eprintln!("geo");
+    // eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
     for i in 0..slice.rows() {
         for j in 0..slice.rows() {
@@ -382,7 +382,8 @@ pub fn euclidean_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> 
             products[[i,j]] = 1.0 / (&geo[i] + &geo[j] - 2.0 * products[[i,j]]).sqrt();
             if !products[[i,j]].is_finite() {
                 products[[i,j]] = 1.0;
-            }
+            };
+            products[[j,i]] = products[[i,j]];
         }
     }
 
@@ -511,18 +512,22 @@ impl Command {
     }
 }
 
-fn mean(input: &ArrayView<f64,Ix1>) -> f64 {
+pub fn array_mean(input: &ArrayView<f64,Ix1>) -> f64 {
     input.iter().sum::<f64>() / (input.len() as f64)
 }
 
-fn correlation(p1: ArrayView<f64,Ix1>,p2: ArrayView<f64,Ix1>) -> f64 {
+pub fn vec_mean(input: &Vec<f64>) -> f64 {
+    input.iter().sum::<f64>() / input.len() as f64
+}
+
+pub fn correlation(p1: ArrayView<f64,Ix1>,p2: ArrayView<f64,Ix1>) -> f64 {
 
     if p1.len() != p2.len() {
         panic!("Tried to compute correlation for unequal length vectors: {}, {}",p1.len(),p2.len());
     }
 
-    let mean1: f64 = mean(&p1);
-    let mean2: f64 = mean(&p2);
+    let mean1: f64 = array_mean(&p1);
+    let mean2: f64 = array_mean(&p2);
 
     let dev1: Vec<f64> = p1.iter().map(|x| (x - mean1)).collect();
     let dev2: Vec<f64> = p2.iter().map(|x| (x - mean2)).collect();

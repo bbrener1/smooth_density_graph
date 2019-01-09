@@ -18,7 +18,7 @@ def main():
     counts = np.loadtxt(sys.argv[1])
     fit_predict(counts,scaling=.1,sample_sub=10)
 
-def fit_predict(targets,command,distance=None,verbose=False,subsample=None,locality=None,processors=None):
+def fit_predict(targets,command,distance=None,verbose=False,subsample=None,k=None,processors=None):
 
     # np.array(targets)
     targets = targets.astype(dtype=float)
@@ -52,8 +52,8 @@ def fit_predict(targets,command,distance=None,verbose=False,subsample=None,local
     #     arg_list.extend(["-verbose"])
     if subsample is not None:
         arg_list.extend(["-ss",str(subsample)])
-    if locality is not None:
-        arg_list.extend(["-l",str(locality)])
+    if k is not None:
+        arg_list.extend(["-k",str(k)])
     if distance is not None:
         arg_list.extend(["-d",str(distance)])
     arg_list.extend(["2>"+progress_temp.name])
@@ -113,4 +113,4 @@ def fit_predict(targets,command,distance=None,verbose=False,subsample=None,local
 
     # print(cp.stdout.read())
 
-    return(list(map(lambda x: int(x),cp.stdout.read().split())))
+    return(list(map(lambda x: float(x),cp.stdout.read().split())))
