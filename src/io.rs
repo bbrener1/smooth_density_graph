@@ -23,6 +23,7 @@ pub struct Parameters {
     pub report_address: Option<String>,
     pub dump_error: Option<String>,
 
+    pub steps: usize,
     pub k: usize,
     pub subsample: usize,
     pub distance: Distance,
@@ -48,6 +49,7 @@ impl Parameters {
             dump_error: None,
             distance: Distance::Cosine,
 
+            steps: 0,
             k: 0,
             subsample:0,
 
@@ -102,16 +104,19 @@ impl Parameters {
                 "-k" | "-locality" => {
                     arg_struct.k = args.next().map(|x| x.parse::<usize>()).expect("k parse error. Not a number?").expect("Iteration error")
                 },
+                "-steps" => {
+                    arg_struct.steps = args.next().map(|x| x.parse::<usize>()).expect("step parse error. Not a number?").expect("Iteration error")
+                },
                 "-d" | "-distance" => {
                     arg_struct.distance = args.next().map(|x| Distance::parse(&x)).expect("Distance parse error")
-                }
+                },
                 "-dm" | "-distance_matrix" => {
                     arg_struct.distance_matrix_file = args.next().expect("Error parsing count location!");
                     arg_struct.distance_matrix = Some(read_counts(&arg_struct.distance_matrix_file));
-                }
+                },
                 "-ss" | "-subsample" => {
                     arg_struct.subsample = args.next().expect("Error iterating subsample").parse::<usize>().expect("Error parsing subsample, not a number?")
-                }
+                },
 
                 &_ => {
                     panic!("Not a valid argument: {}", arg);

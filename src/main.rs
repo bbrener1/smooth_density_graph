@@ -16,11 +16,14 @@ extern crate rayon;
 mod smooth_density_graph;
 mod io;
 mod clustering;
+mod follow_the_crowd;
 
 use io::Parameters;
 use clustering::Cluster;
-use smooth_density_graph::Graph;
-use io::write_vec;
+// use smooth_density_graph::Graph;
+use follow_the_crowd::Graph;
+// use io::write_vec;
+use io::write_vector;
 
 fn main() {
 
@@ -43,9 +46,9 @@ fn main() {
 
     graph.connect();
 
-    let densities = graph.smooth_densities();
+    Graph::wanderlust(&mut graph);
 
-    write_vec(densities, &None);
+    write_vector(graph.populations(), &None);
 
     // let labels = vec![Graph::wandernode(0,graph)];
     // let (final_positions,fuzz) = Graph::wanderlust(graph);
