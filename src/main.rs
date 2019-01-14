@@ -17,13 +17,14 @@ mod smooth_density_graph;
 mod io;
 mod clustering;
 mod follow_the_crowd;
+mod connection_density;
 
 use io::Parameters;
 use clustering::Cluster;
-// use smooth_density_graph::Graph;
-use follow_the_crowd::Graph;
-// use io::write_vec;
+use connection_density::Graph;
+use io::write_vec;
 use io::write_vector;
+use io::write_array;
 
 fn main() {
 
@@ -44,24 +45,40 @@ fn main() {
 
     let mut graph = Graph::new(counts,parameters_raw);
 
-    graph.connect();
+    graph.rapid_connection();
 
-    Graph::wanderlust(&mut graph);
+    // for _ in 0..5 {
+    //     graph.smooth_density();
+    //     graph.connect();
+    // }
 
-    write_vector(graph.populations(), &None);
+    let labels = Graph::fuzzy_cluster(&mut graph);
+
+    write_vec(labels, &None);
+
+    // write_vec(Graph::history_mode(&wanderers),&None);
+
+    // let (final_positions,fuzz) = graph.fuzzy_positions();
+    //
+    // write_vec(Cluster::quick_cluster(final_positions, fuzz, distance),&None);
+
+    // Graph::wanderlust(&mut graph);
+    // write_vector(graph.populations(), &None);
 
     // let labels = vec![Graph::wandernode(0,graph)];
-    // let (final_positions,fuzz) = Graph::wanderlust(graph);
+    // let wanderers = Graph::wanderlust(&mut graph);
+    // let (final_positions,fuzz) = Graph::final_positions(wanderers, &mut graph);
     // let labels = Cluster::quick_cluster(final_positions,fuzz,distance);
-    // eprintln!("Wanderlust:{:?}",labels.iter().enumerate().collect::<Vec<(usize,&usize)>>());
     // write_vec(labels,&None);
+    // eprintln!("Wanderlust:{:?}",labels.iter().enumerate().collect::<Vec<(usize,&usize)>>());
+    // write_array(final_positions,&None);
 }
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use smooth_density_graph::Graph;
+    use follow_the_crowd::Graph;
     use io::Distance;
 
     pub fn example_graph() -> Graph {
@@ -78,6 +95,7 @@ mod tests {
         let a = (0..100).map(|x| x as f64).collect();
         let mut p = Parameters::from_vec((10,10), a, 3, 5);
         p.distance = Distance::Euclidean;
+        p.steps = 3;
         let points = p.counts.clone().unwrap();
         p.distance_matrix = Some(p.distance.matrix(p.counts.take().unwrap().view()));
         let mut graph = Graph::new(points,p);
@@ -100,9 +118,9 @@ mod tests {
 
     #[test]
     pub fn wanderlust() {
-        let graph = example_graph();
-        let (final_positions,fuzz) = Graph::wanderlust(graph);
-        Cluster::quick_cluster(final_positions, fuzz, Distance::Cosine);
+        let mut graph = example_graph();
+        let wanderers = Graph::wanderlust(&mut graph);
+        // Cluster::quick_cluster(final_positions, fuzz, Distance::Cosine);
         // panic!();
     }
 

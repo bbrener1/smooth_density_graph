@@ -18,7 +18,7 @@ def main():
     counts = np.loadtxt(sys.argv[1])
     fit_predict(counts,scaling=.1,sample_sub=10)
 
-def fit_predict(targets,command,distance=None,verbose=False,subsample=None,k=None,processors=None):
+def fit_predict(targets,command,distance=None,verbose=False,steps=None,subsample=None,k=None,processors=None,backtrace=False):
 
     # np.array(targets)
     targets = targets.astype(dtype=float)
@@ -44,12 +44,17 @@ def fit_predict(targets,command,distance=None,verbose=False,subsample=None,k=Non
 
     print("Running " + str(path_to_rust))
 
-    arg_list = [str(path_to_rust),command]
+    arg_list = []
+    if backtrace:
+        arg_list.append("RUST_BACKTRACE=1")
+    arg_list.extend([str(path_to_rust),command])
     arg_list.extend(["-c",input_temp.name])
     # arg_list.extend(["-stdin"])
     # arg_list.extend(["-stdout"])
     # if verbose:
     #     arg_list.extend(["-verbose"])
+    if steps is not None:
+        arg_list.extend(["-steps",str(steps)])
     if subsample is not None:
         arg_list.extend(["-ss",str(subsample)])
     if k is not None:
@@ -112,5 +117,7 @@ def fit_predict(targets,command,distance=None,verbose=False,subsample=None,k=Non
         print(line)
 
     # print(cp.stdout.read())
+
+    # return(list([float(x) for x in cp.stdout.read().split()]))
 
     return(list(map(lambda x: float(x),cp.stdout.read().split())))

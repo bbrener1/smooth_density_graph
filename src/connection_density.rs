@@ -14,7 +14,9 @@ use std::cmp::Ordering;
 
 use clustering::Cluster;
 
-#[derive(Debug)]
+use rayon::prelude::*;
+
+#[derive(Debug,Clone)]
 struct Node {
     id: usize,
     coordinates: Array<f64,Ix1>,
@@ -38,24 +40,18 @@ impl Node {
     }
 
     pub fn connect_subsampled(&mut self, mut subsampled_indecies: Vec<usize>, mut distances: Vec<f64>) {
-        if let Some(index) = subsampled_indecies.iter().position(|x| x == &self.id) {
-            subsampled_indecies.swap_remove(index);
-            distances.swap_remove(index);
-        }
         let mut nearest_indecies = k_max(self.parameters.k,&distances);
         let mut nearest_neighbors: Vec<usize> = nearest_indecies.iter().map(|i| subsampled_indecies[*i]).collect();
         let mut nearest_similarities: Vec<f64> = nearest_indecies.iter().map(|i| distances[*i]).collect();
-        nearest_neighbors.push(self.id);
-        nearest_similarities.push(self.parameters.distance.measure(self.coordinates.view(),self.coordinates.view()));
         self.neighbors = nearest_neighbors;
     }
 
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Graph {
     arena: Vec<Node>,
-    population: Array<usize,Ix1>,
+    density: Array<usize,Ix1>,
     points: Arc<Array<f64,Ix2>>,
     parameters: Arc<Parameters>,
     distance_matrix: Arc<Array<f64,Ix2>>,
@@ -73,10 +69,10 @@ impl Graph {
             .enumerate()
             .map(|(i,point)| Node::new(i,point.view(),shared_parameters.clone()))
             .collect();
-        let population = Array::ones(arena.len());
+        let density = Array::zeros(arena.len());
         Graph {
             arena: arena,
-            population: population,
+            density: density,
             points: shared_points,
             distance_matrix: distance_matrix,
             parameters: shared_parameters,
@@ -91,6 +87,37 @@ impl Graph {
         sample(&mut thread_rng(), self.len(), self.parameters.subsample).into_vec()
     }
 
+    pub fn density(&self) -> &Array<usize,Ix1> {
+        &self.density
+    }
+
+    // pub fn peaks_to_valleys(&self) -> Vec<usize> {
+    //     let mut available_points: HashSet<usize> = (0..self.len()).collect();
+    //     let mut peak_assignments = vec![(0,0);self.len()];
+    //     loop {
+    //         let mut available_densities:Vec<(usize,usize)> = available_points.iter().map(|i| (*i,self.density[*i])).collect();
+    //         let best_peak = available_densities.iter().max_by_key(|(i,d)| *d).map(|x| *x);
+    //         if let Some((peak_index,peak_density)) = best_peak {
+    //             eprintln!("Best peak:{},{}",peak_index,peak_density);
+    //             available_points.remove(&peak_index);
+    //             let peak_children = self.downhill(peak_index);
+    //             eprintln!("REMOVING:{:?}",peak_children);
+    //             for child in peak_children {
+    //                 available_points.remove(&child);
+    //                 if peak_assignments[child].1 < peak_density {
+    //                     peak_assignments[child] = (peak_index,peak_density);
+    //                 }
+    //             }
+    //         }
+    //         if available_points.len() > 0 {
+    //             eprintln!("Undescended points: {}", available_points.len());
+    //         }
+    //         else {
+    //             break
+    //         }
+    //     }
+    //     peak_assignments.into_iter().map(|(i,d)| i).collect()
+    // }
 
     pub fn subsample_neighbors(&self,origin:usize) -> (Vec<usize>, Vec<f64>) {
         let indecies = self.subsampled_indices();
@@ -109,20 +136,6 @@ impl Graph {
         connectivity
     }
 
-    pub fn populations(&self) -> Array<usize,Ix1> {
-        self.population.clone()
-    }
-
-    pub fn pick_a_step(&self,start:usize,rng:&mut ThreadRng) -> Option<usize> {
-        // eprintln!("Picking a step");
-        // eprintln!("{:?}",start);
-        // eprintln!("{:?}",self.arena[start].sampler);
-        // eprintln!("{:?}",self.arena[start].neighbors);
-        let neighbor_index = self.arena[start].sampler.draw_replace_rng(rng).map(|(k,v)| v);
-        // eprintln!("{:?}",neighbor_index);
-        neighbor_index.map(|i| self.arena[start].neighbors[i])
-
-    }
 
     pub fn connect(&mut self) {
         for i in 0..self.arena.len() {
@@ -132,108 +145,81 @@ impl Graph {
         }
     }
 
-    fn update_population(&mut self,wanderers:&Vec<Wanderer>) {
-        self.population.fill(1);
-        for wanderer in wanderers {
-            self.population[wanderer.current_node] += 1;
-        }
-        for node in self.arena.iter_mut() {
-            let neighbors = &node.neighbors;
-            let population = &self.population;
-            let populations = neighbors.iter().map(|i| population[*i] as i64).collect();
-            node.sampler = WBST::<i64,usize>::index_tree(&populations)
-        }
-    }
-
-    pub fn wandernode(node:usize,mut graph:Graph) -> usize {
-        let mut wanderer = Wanderer::new(node, graph.parameters.clone());
-        let mut counter = 0;
-        let mut rng = thread_rng();
-        while !wanderer.converged(&graph) {
-            counter += 1;
-            if counter > 1000 {
+    pub fn wanderlust(prototype:Arc<Graph>) -> Vec<Wanderer> {
+        let mut wanderers: Vec<Wanderer> = (0..prototype.arena.len()).map(|i| Wanderer::new(i,prototype.parameters.clone())).collect();
+        let mut local_prototype: Graph = (*prototype).clone();
+        local_prototype.connect();
+        // local_prototype.set_samplers();
+        // let mut rng = thread_rng();
+        let mut graph: Result<Graph,Arc<Graph>> = Ok(local_prototype);
+        let mut converged = 0;
+        let mut steps = 0;
+        while converged < wanderers.len() {
+            steps += 1;
+            if steps > 1000 {
                 break
             }
-            let next_opt = graph.pick_a_step(wanderer.current_node,&mut rng);
-            if let Some(next) = next_opt {
-                wanderer.directed_step(next);
-            }
-            graph.update_population(&vec![wanderer.clone()]);
-        }
-        wanderer.current_node
-    }
-
-    pub fn wanderlust(graph:&mut Graph) -> Vec<Wanderer> {
-        let mut wanderers: Vec<Wanderer> = (0..graph.arena.len()).map(|i| Wanderer::new(i,graph.parameters.clone())).collect();
-        graph.update_population(&wanderers);
-        let mut converged_wanderers = 0;
-        let mut rng = thread_rng();
-        let mut step_counter = 0;
-        eprintln!("Wandering!");
-        while converged_wanderers < wanderers.len() {
-            eprintln!("Step:{},{} converged",step_counter,converged_wanderers);
-            step_counter += 1;
-            if step_counter > graph.parameters.steps {
-                break
-            }
-            converged_wanderers = 0;
+            // eprintln!("Step {}, {} converged", steps,converged);
+            converged = 0;
+            let mut local_graph = graph.ok().take().unwrap();
+            local_graph.connect();
+            let arc_graph = Arc::new(local_graph);
             for wanderer in wanderers.iter_mut() {
-                if let Some(next) = graph.pick_a_step(wanderer.current_node,&mut rng) {
-                    wanderer.directed_step(next);
-                    if wanderer.converged(&graph) {
-                        converged_wanderers += 1;
-                    }
-                }
+                if !wanderer.step(arc_graph.clone()).is_some() {converged += 1};
+                // if !wanderer.stochastic_step(arc_graph.clone(),&mut rng).is_some() {converged += 1};
             }
-            // eprintln!("Updating pops");
-            graph.update_population(&wanderers);
-            graph.connect();
-
+            graph = Arc::try_unwrap(arc_graph)
         }
         wanderers
+
     }
 
-    pub fn final_positions(wanderers:Vec<Wanderer>,graph: &Graph) -> (Array<f64,Ix2>,Array<f64,Ix1>) {
-        let mut final_positions: Array<f64,Ix2> = (*graph.points).clone();
-        let mut fuzz: Array<f64,Ix1> = Array::zeros(graph.arena.len());
-        for wanderer in wanderers {
-            final_positions.row_mut(wanderer.origin).assign(&graph.arena[wanderer.current_node].coordinates);
-            fuzz[wanderer.origin] = wanderer.fuzz(&graph).unwrap().1;
+    pub fn fuzzy_cluster(prototype:&mut Graph) -> Vec<usize> {
+        let arc_graph = Arc::new(prototype.clone());
+        let metavec: Vec<(usize,Vec<usize>)> = (0..20usize).into_par_iter().map(|i| {
+            let wanderers = Graph::wanderlust(arc_graph.clone());
+            eprintln!("Cluster repeat {:?}",i);
+            (i,wanderers.iter().map(|w| w.current()).collect())
+        }).collect();
+        let mut fuzzy_landing: Array<usize,Ix2> = Array::zeros((20,arc_graph.len()));
+        for (i,clusters) in metavec.into_iter() {
+            fuzzy_landing.row_mut(i).assign(&mut Array::from_vec(clusters));
         }
-        (final_positions,fuzz)
+        fuzzy_landing.t().axis_iter(Axis(0)).map(|row| *mode(row.iter())).collect()
     }
 
-    pub fn final_positions_single(wanderers:Vec<Wanderer>,graph: &Graph) -> Array<f64,Ix2> {
-        let mut final_positions: Array<f64,Ix2> = (*graph.points).clone();
-        for wanderer in wanderers {
-            final_positions.row_mut(wanderer.origin).assign(&graph.arena[wanderer.current_node].coordinates);
-        }
-        final_positions
+
+    pub fn pick_step(&self, start:usize,rng:&mut ThreadRng) -> Option<usize> {
+        let neighbor_index = &self.arena[start].sampler.draw_replace_rng(rng);
+        let pick = neighbor_index.map(|(weight,index)| self.arena[start].neighbors[index]);
+        pick
+    }
+
+    pub fn highest_density_neighbor(&self,start:usize) -> Option<usize> {
+        let max_neighbor_index = self.arena[start].neighbors
+            .iter()
+            .map(|&i| self.density[i])
+            .enumerate()
+            .max_by_key(|x| x.1)
+            .map(|(i,d)| i);
+        max_neighbor_index.map(|i| self.arena[start].neighbors[i])
+    }
+
+    pub fn stochastic_weighted_neighbor(&self,start:usize,rng:&mut ThreadRng) -> Option<usize> {
+        let neighbor_index = self.arena[start].sampler.draw_replace_rng(rng);
+        neighbor_index.map(|(w,i)| self.arena[start].neighbors[i])
     }
 
     pub fn distance(&self) -> Distance {
         self.parameters.distance
     }
 
-    pub fn fuzzy_positions(&mut self) -> (Array<f64,Ix2>,Array<f64,Ix1>) {
-        let mut final_positions = vec![];
-        for _ in 0..10 {
-            let wanderers = Graph::wanderlust(self);
-            final_positions.push(Graph::final_positions_single(wanderers, self));
-        };
-        eprintln!("Ran five times, generating consensus");
-        let fuzzy_positions = average_repeats(&final_positions);
-        eprintln!("Fuzzy positions found");
-        let fuzz = repeat_fuzz(&final_positions, &fuzzy_positions, self.distance());
-        eprintln!("Fuzz found");
-        (fuzzy_positions,fuzz)
-    }
 
     pub fn history_mode(wanderers:&Vec<Wanderer>) -> Vec<usize> {
-        wanderers.iter().map(|w| *mode(w.node_history.iter())).collect()
+        wanderers.iter().map(|w| mode(w.density_history.iter()).0).collect()
     }
 
-    pub fn rapid_connection(&mut self) -> Array<usize,Ix1> {
+    pub fn rapid_connection(&mut self) {
         let mut connectivity = Array::zeros(self.arena.len());
         for i in 0..self.parameters.steps {
             eprintln!("Running rapid connections: {}",i);
@@ -244,17 +230,39 @@ impl Graph {
                 }
             }
         }
-        connectivity
+
+        self.density = connectivity;
+
     }
+
+    pub fn set_samplers(&mut self) {
+        let densities = &self.density;
+        for node in self.arena.iter_mut() {
+            let mut neighbor_densities = node.neighbors.iter().map(|i| densities[*i] as i64).collect();
+            node.sampler = WBST::<i64,usize>::index_tree(&neighbor_densities);
+        }
+    }
+
+    pub fn smooth_density(&mut self) -> Array<usize,Ix1> {
+        let mut new_density: Array<usize,Ix1> = Array::zeros(self.arena.len());
+        for node in &self.arena {
+            let neighbor_densities: Vec<usize> = node.neighbors.iter().map(|i| self.density[*i]).collect();
+            new_density[node.id] = neighbor_densities.iter().sum::<usize>()/neighbor_densities.len();
+        }
+        new_density
+    }
+
 
 }
 
+const HISTORY_SIZE: usize = 50;
 
 #[derive(Debug,Clone)]
 pub struct Wanderer {
     origin: usize,
     current_node: usize,
-    node_history: VecDeque<usize>,
+    density_history: VecDeque<(usize,usize)>,
+    max_density: usize,
     parameters: Arc<Parameters>,
 }
 
@@ -264,47 +272,71 @@ impl Wanderer {
             parameters:parameters,
             origin: start,
             current_node: start,
-            node_history: VecDeque::with_capacity(51),
+            density_history: VecDeque::with_capacity(HISTORY_SIZE + 1),
+            max_density: 0,
         }
     }
 
     pub fn reset(&mut self) {
-        self.node_history.clear();
+        self.density_history.clear();
         self.current_node = self.origin;
     }
 
-    pub fn directed_step(&mut self, node:usize) {
-        self.current_node = node;
-        self.node_history.push_back(self.current_node);
-        if self.node_history.len() > 50 {
-            self.node_history.pop_front();
-        }
-    }
+    pub fn step(&mut self, graph: Arc<Graph>) -> Option<usize> {
 
-    pub fn converged(&self,graph:&Graph) -> bool {
-        if let Some((far,close)) = self.fuzz(graph) {
-            if far/close < 2. {
-                true
+        if let None = self.converged(&graph) {
+            let step = graph.highest_density_neighbor(self.current_node);
+            if let Some(next) = step {
+                self.current_node = next;
+                let density = graph.density[self.current_node];
+                self.density_history.push_back((self.current_node,density));
+                if self.density_history.len() > HISTORY_SIZE {
+                    self.density_history.pop_front();
+                }
+                if self.max_density < density { self.max_density = density};
             }
-            else {false}
+            step
         }
-        else {false}
+        else { None }
+
     }
 
-    pub fn fuzz(&self,graph:&Graph) -> Option<(f64,f64)> {
-        if self.node_history.len() < 50 {
+    pub fn stochastic_step(&mut self, graph: Arc<Graph>,rng:&mut ThreadRng) -> Option<usize> {
+
+        if let None = self.converged(&graph) {
+            let step = graph.stochastic_weighted_neighbor(self.current_node, rng);
+            if let Some(next) = step {
+                self.current_node = next;
+                let density = graph.density[self.current_node];
+                self.density_history.push_back((self.current_node,graph.density[self.current_node]));
+                if self.density_history.len() > HISTORY_SIZE {
+                    self.density_history.pop_front();
+                }
+                if self.max_density < density { self.max_density = density};
+            }
+            step
+        }
+        else { None }
+
+    }
+
+    pub fn current(&self) -> usize {
+        self.current_node
+    }
+
+    pub fn converged(&self,graph:&Graph) -> Option<usize> {
+
+        if self.density_history.len() < HISTORY_SIZE {
+            return None
+        }
+
+        if self.max_density > self.density_history[0].1 {
             None
         }
         else {
-            let current = graph.points.row(self.current_node);
-            let close = graph.points.row(self.node_history[40]);
-            let far = graph.points.row(self.node_history[0]);
-            let close_distance = self.parameters.distance.measure(current,close);
-            let far_distance = self.parameters.distance.measure(current,far);
-            Some((far_distance,close_distance))
+            self.density_history.get(0).map(|(i,d)| *d)
         }
     }
-
 
 }
 
@@ -319,6 +351,17 @@ fn count_vec<'a,U: Iterator<Item=&'a T>,T:Hash + Eq>(mut collection: U) -> HashM
 fn mode<'a,U: Iterator<Item=&'a T>,T:Hash + Eq + Clone>(collection:U) -> &'a T {
     let map = count_vec(collection);
     map.into_iter().max_by_key(|(k,c)| *c).unwrap().0
+}
+
+fn significant_mode<'a,U: Iterator<Item=&'a T>,T:Hash + Eq + Clone>(collection:U) -> Option<&'a T> {
+    let map = count_vec(collection);
+    let total = map.values().sum::<usize>();
+    let max_key = map.into_iter().max_by_key(|(k,c)| *c).unwrap();
+    if max_key.1 > (total/5) {
+        Some(max_key.0)
+    }
+    else { None }
+
 }
 
 
