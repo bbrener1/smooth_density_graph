@@ -13,24 +13,27 @@ extern crate ndarray;
 extern crate rayon;
 
 
-mod smooth_density_graph;
 mod io;
 mod clustering;
-mod follow_the_crowd;
 mod connection_density;
 
 use io::Parameters;
-use clustering::Cluster;
+use io::Command;
 use connection_density::Graph;
 use io::write_vec;
 use io::write_vector;
 use io::write_array;
+use io::renumber;
 
 fn main() {
 
     let mut arg_iter = env::args();
 
     let mut parameters_raw = Parameters::read(&mut arg_iter);
+
+    eprintln!("Parameters read");
+
+    parameters_raw.summary();
 
     let distance = parameters_raw.distance;
 
@@ -40,21 +43,31 @@ fn main() {
         let counts = parameters_raw.counts.as_ref().expect("No counts or distance matrix specified");
         parameters_raw.distance_matrix = Some(parameters_raw.distance.matrix(counts.view()));
     }
+    else {
+        parameters_raw.distance_matrix = distance_matrix;
+    }
 
-    let counts = parameters_raw.counts.take().unwrap();
+    eprintln!("Distance matrix obtained, computing");
 
-    let mut graph = Graph::new(counts,parameters_raw);
+    let mut graph = Graph::new(parameters_raw);
 
     graph.rapid_connection();
 
-    // for _ in 0..5 {
-    //     graph.smooth_density();
-    //     graph.connect();
-    // }
+    match graph.parameters.command {
+        Command::FitPredict => {
 
-    let labels = Graph::fuzzy_cluster(&mut graph);
+            let mut labels = Graph::fuzzy_cluster(&mut graph);
 
-    write_vec(labels, &None);
+            labels = renumber(&labels);
+
+            write_vec(labels, &None);
+
+        },
+        Command::Density => {
+            write_vector(graph.density().to_owned(),&None);
+        }
+    }
+
 
     // write_vec(Graph::history_mode(&wanderers),&None);
 
@@ -78,15 +91,17 @@ fn main() {
 mod tests {
 
     use super::*;
-    use follow_the_crowd::Graph;
+    use connection_density::Graph;
     use io::Distance;
+    use io::sanitize;
+    use ndarray::prelude::*;
 
     pub fn example_graph() -> Graph {
         let a = (0..100).map(|x| x as f64).collect();
         let mut p = Parameters::from_vec((25,4), a, 3, 5);
         let points = p.counts.clone().unwrap();
         p.distance_matrix = Some(p.distance.matrix(p.counts.take().unwrap().view()));
-        let mut graph = Graph::new(points,p);
+        let mut graph = Graph::new(p);
         graph.connect();
         graph
     }
@@ -98,7 +113,7 @@ mod tests {
         p.steps = 3;
         let points = p.counts.clone().unwrap();
         p.distance_matrix = Some(p.distance.matrix(p.counts.take().unwrap().view()));
-        let mut graph = Graph::new(points,p);
+        let mut graph = Graph::new(p);
         graph.connect();
         graph
     }
@@ -110,19 +125,26 @@ mod tests {
     }
 
     #[test]
-    pub fn wandertest() {
-        let graph = example_graph();
-        let node = 0;
-        eprintln!("{:?}",Graph::wandernode(node, graph));
-    }
-
-    #[test]
     pub fn wanderlust() {
         let mut graph = example_graph();
-        let wanderers = Graph::wanderlust(&mut graph);
+        let wanderers = Graph::fuzzy_cluster(&mut graph);
         // Cluster::quick_cluster(final_positions, fuzz, Distance::Cosine);
         // panic!();
     }
 
+    #[test]
+    pub fn renumber_test() {
+        let a = vec![10,5,3,3,10];
+        assert_eq!(renumber(&a),vec![0,1,2,2,0]);
+    }
+
+    #[test]
+    pub fn sanitize_test() {
+        let mut a = Array::from_shape_vec((5,5),(0..25).map(|x| x as f64).collect()).unwrap();
+        let mut b = a.slice(s![..,1..]).to_owned();
+        a.column_mut(0).fill(0.);
+        a = sanitize(a);
+        assert_eq!(sanitize(a),b);
+    }
 
 }

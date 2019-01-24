@@ -18,7 +18,7 @@ def main():
     counts = np.loadtxt(sys.argv[1])
     fit_predict(counts,scaling=.1,sample_sub=10)
 
-def fit_predict(targets,command,distance=None,verbose=False,steps=None,subsample=None,k=None,processors=None,backtrace=False):
+def fit_predict(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs):
 
     # np.array(targets)
     targets = targets.astype(dtype=float)
@@ -43,24 +43,36 @@ def fit_predict(targets,command,distance=None,verbose=False,steps=None,subsample
     path_to_rust = (Path(__file__).parent / "target/release/smooth_density_graph").resolve()
 
     print("Running " + str(path_to_rust))
+    # print(str(precomputed))
+    # if precomputed:
+    #     print("WHY IS PRECOMPUTED TRUE?")
+    # else:
+    #     print("PRECOMPUTED IS FALSE")
 
     arg_list = []
     if backtrace:
         arg_list.append("RUST_BACKTRACE=1")
     arg_list.extend([str(path_to_rust),command])
-    arg_list.extend(["-c",input_temp.name])
-    # arg_list.extend(["-stdin"])
-    # arg_list.extend(["-stdout"])
-    # if verbose:
-    #     arg_list.extend(["-verbose"])
-    if steps is not None:
-        arg_list.extend(["-steps",str(steps)])
-    if subsample is not None:
-        arg_list.extend(["-ss",str(subsample)])
-    if k is not None:
-        arg_list.extend(["-k",str(k)])
-    if distance is not None:
-        arg_list.extend(["-d",str(distance)])
+    if precomputed:
+        arg_list.extend(["-dm",input_temp.name])
+    else:
+        arg_list.extend(["-c",input_temp.name])
+    if auto:
+        arg_list.append("-auto")
+    for key,value in kwargs.items():
+        arg_list.extend(["-"+str(key),str(value)])
+    # # arg_list.extend(["-stdin"])
+    # # arg_list.extend(["-stdout"])
+    # # if verbose:
+    # #     arg_list.extend(["-verbose"])
+    # if steps is not None:
+    #     arg_list.extend(["-steps",str(steps)])
+    # if subsample is not None:
+    #     arg_list.extend(["-ss",str(subsample)])
+    # if k is not None:
+    #     arg_list.extend(["-k",str(k)])
+    # if distance is not None:
+    #     arg_list.extend(["-d",str(distance)])
     arg_list.extend(["2>"+progress_temp.name])
 
     print("Command: " + " ".join(arg_list))
@@ -118,6 +130,9 @@ def fit_predict(targets,command,distance=None,verbose=False,steps=None,subsample
 
     # print(cp.stdout.read())
 
-    # return(list([float(x) for x in cp.stdout.read().split()]))
+    if command == "density":
+        return(list([float(x) for x in cp.stdout.read().split()]))
+    if command == "fitpredict":
+        return(list(map(lambda x: int(x),cp.stdout.read().split())))
 
-    return(list(map(lambda x: float(x),cp.stdout.read().split())))
+    print("Invalid command, please specify fitpredict or density")

@@ -61,6 +61,8 @@ impl Parameters {
 
     pub fn read<T: Iterator<Item = String>>(args: &mut T) -> Parameters {
 
+        eprintln!("Reading parameters");
+
         let mut arg_struct = Parameters::empty();
 
         let _raw_command = args.next();
@@ -132,14 +134,29 @@ impl Parameters {
 
     fn auto(&mut self) {
 
-        let counts = self.counts.as_ref().expect("Please specify counts file before the \"-auto\" argument.");
+        let mtx_o = self.counts.iter().chain(self.distance_matrix.iter()).next();
+        let mtx: &Array<f64,Ix2> = mtx_o.expect("Please specify counts file before the \"-auto\" argument.");
 
         let processors = num_cpus::get();
+
+        let subsample = mtx.shape()[0] / 4;
+
+        let k = (((mtx.shape()[0] as f64).log10() * 2.) + 1.) as usize;
 
         self.auto = true;
 
         self.processor_limit.get_or_insert( processors );
+        self.subsample = subsample;
+        self.k = k;
+        self.steps = 10;
 
+    }
+
+    pub fn summary(&self) {
+        eprintln!("Parameter summary:");
+        eprintln!("k:{:?}",self.k);
+        eprintln!("sub:{:?}",self.subsample);
+        eprintln!("steps:{:?}",self.steps);    
     }
 
     pub fn distance(&self, p1:ArrayView<f64,Ix1>,p2:ArrayView<f64,Ix1>) -> f64 {
@@ -346,22 +363,34 @@ pub fn standardize(input: &Array<f64,Ix2>) -> Array<f64,Ix2> {
 }
 
 pub fn sanitize(mut input: Array<f64,Ix2>) -> Array<f64,Ix2> {
-    for ref mut feature in input.axis_iter_mut(Axis(1)) {
-        if feature.iter().sum::<f64>() == 0. {
-            feature.fill(1.)
-        }
-    };
-    input
+    let sums = input.sum_axis(Axis(0));
+    let non_zero = sums.iter().map(|x| if *x > 0. {1} else {0}).sum::<usize>();
+    if non_zero < input.shape()[1] {
+        eprintln!("WARNING: This input isn't sanitized, some features are all 0. We recommend using sanitized data");
+        eprintln!("Sums:{:?}",sums.shape());
+        eprintln!("Non-zero:{:?}",non_zero);
+        let mut sanitized = Array::zeros((input.shape()[0],non_zero));
+        eprintln!("Sanitized:{:?}",sanitized.shape());
+        let mut feature_iter = input.axis_iter(Axis(1));
+        let mut counter = 0;
+        for (f,&s) in feature_iter.zip(sums.into_iter()) {
+            // eprintln!("Feature:{:?}",f.shape());
+            if s > 0. {
+                sanitized.column_mut(counter).assign(&f);
+                counter += 1;
+            }
+        };
+        sanitized
+    }
+    else { input }
 }
 
 
 pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
+    let sanitized = sanitize(slice.to_owned());
     let mut products = slice.dot(&slice.t());
     // eprintln!("Products");
     let mut geo = (&slice * &slice).sum_axis(Axis(1));
-    if geo.iter().any(|x| *x == 0.) {
-        panic!("Unsanitized input, detected an all-0 feature (column), please use a different distance metric, or sanitize your input");
-    }
     // eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
     for i in 0..slice.rows() {
@@ -402,8 +431,10 @@ pub fn euclidean_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> 
 pub fn correlation_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let mut output = Array::zeros((slice.rows(),slice.cols()));
     for i in 0..slice.rows() {
-        for j in 0..slice.cols() {
-            output[[i,j]] = correlation(slice.row(i),slice.row(j));
+        for j in i..slice.cols() {
+            let c = correlation(slice.row(i),slice.row(j));
+            output[[i,j]] = c;
+            output[[j,i]] = c;
         }
     }
     output
@@ -492,11 +523,8 @@ impl Distance {
 
 #[derive(Debug,Clone)]
 pub enum Command {
-    Fit,
-    Predict,
     FitPredict,
-    Fuzzy,
-    Mobile,
+    Density,
 }
 
 impl Command {
@@ -504,11 +532,8 @@ impl Command {
     pub fn parse(command: &str) -> Command {
 
         match &command[..] {
-            "fit" => Command::Fit,
-            "predict" => Command::Predict,
             "fitpredict" | "fit_predict" | "combined" => Command::FitPredict,
-            "fuzzy_predict" | "fuzzy" => Command::Fuzzy,
-            "mobile" => Command::Mobile,
+            "density" => Command::Density,
             _ =>{
                 eprintln!("Not a valid top-level command, please choose from \"fit\",\"predict\", or \"fitpredict\". Exiting");
                 panic!()
@@ -628,6 +653,17 @@ pub fn write_vec<T: Debug>(input: Vec<T>,target: &Option<String>) -> Result<(),E
         }
     }
 }
+
+pub fn renumber(invec:&Vec<usize>) -> Vec<usize> {
+    let mut map: HashMap<usize,usize> = HashMap::new();
+    let mut outvec = Vec::with_capacity(invec.len());
+    for i in invec {
+        let l = map.len();
+        outvec.push(*map.entry(*i).or_insert(l));
+    }
+    outvec
+}
+
 
 //
 // fn tsv_format<T:Debug>(input:&Vec<Vec<T>>) -> String {

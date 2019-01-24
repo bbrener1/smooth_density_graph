@@ -12,14 +12,13 @@ use std::hash::Hash;
 use std::cmp::Eq;
 use std::cmp::Ordering;
 
-use clustering::Cluster;
 
 use rayon::prelude::*;
 
 #[derive(Debug,Clone)]
 struct Node {
     id: usize,
-    coordinates: Array<f64,Ix1>,
+    // coordinates: Array<f64,Ix1>,
     neighbors: Vec<usize>,
     sampler: WBST<i64,usize>,
     parameters: Arc<Parameters>,
@@ -29,10 +28,9 @@ struct Node {
 
 impl Node {
 
-    pub fn new(id: usize, view: ArrayView<f64,Ix1>,parameters:Arc<Parameters>) -> Node {
+    pub fn new(id: usize,parameters:Arc<Parameters>) -> Node {
         Node {
             id: id,
-            coordinates: view.to_owned(),
             neighbors: vec![],
             sampler: WBST::empty(),
             parameters: parameters,
@@ -52,28 +50,24 @@ impl Node {
 pub struct Graph {
     arena: Vec<Node>,
     density: Array<usize,Ix1>,
-    points: Arc<Array<f64,Ix2>>,
-    parameters: Arc<Parameters>,
+    // points: Arc<Array<f64,Ix2>>,
+    pub parameters: Arc<Parameters>,
     distance_matrix: Arc<Array<f64,Ix2>>,
 }
 
 impl Graph {
 
-    pub fn new(points: Array<f64,Ix2>,mut parameters: Parameters) -> Graph {
-        let shared_points = Arc::new(points);
+    pub fn new(mut parameters: Parameters) -> Graph {
         let distance_matrix = Arc::new(parameters.distance_matrix.take().unwrap());
         let shared_parameters = Arc::new(parameters);
-        let arena: Vec<Node> =
-            shared_points
-            .axis_iter(Axis(0))
-            .enumerate()
-            .map(|(i,point)| Node::new(i,point.view(),shared_parameters.clone()))
+        let arena: Vec<Node> = (0..distance_matrix.shape()[0]).map(|i| Node::new(i,shared_parameters.clone()))
             .collect();
         let density = Array::zeros(arena.len());
+        eprintln!("Graph created:{}",arena.len());
         Graph {
             arena: arena,
             density: density,
-            points: shared_points,
+            // points: shared_points,
             distance_matrix: distance_matrix,
             parameters: shared_parameters,
         }
