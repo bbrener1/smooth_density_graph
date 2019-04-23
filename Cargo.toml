@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["boris"]
 
 [dependencies]
-weighted_sampling = {path = "/Users/boris/haxx/weighted_sampling/"}
+weighted_sampling = {path = "../weighted_sampling/"}
 ndarray = "0.12"
 rand = "0.6"
 num_cpus = "1.8.0"
