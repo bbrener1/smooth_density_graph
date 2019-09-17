@@ -139,7 +139,7 @@ impl Parameters {
 
         let processors = num_cpus::get();
 
-        let subsample = mtx.shape()[0] / 4;
+        let subsample = (mtx.shape()[0] / 4) * 5;
 
         let k = (((mtx.shape()[0] as f64).log10() * 2.) + 1.) as usize;
 
@@ -156,7 +156,7 @@ impl Parameters {
         eprintln!("Parameter summary:");
         eprintln!("k:{:?}",self.k);
         eprintln!("sub:{:?}",self.subsample);
-        eprintln!("steps:{:?}",self.steps);    
+        eprintln!("steps:{:?}",self.steps);
     }
 
     pub fn distance(&self, p1:ArrayView<f64,Ix1>,p2:ArrayView<f64,Ix1>) -> f64 {
@@ -429,9 +429,9 @@ pub fn euclidean_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> 
 }
 
 pub fn correlation_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
-    let mut output = Array::zeros((slice.rows(),slice.cols()));
+    let mut output = Array::zeros((slice.rows(),slice.rows()));
     for i in 0..slice.rows() {
-        for j in i..slice.cols() {
+        for j in i..slice.rows() {
             let c = correlation(slice.row(i),slice.row(j));
             output[[i,j]] = c;
             output[[j,i]] = c;
