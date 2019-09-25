@@ -139,7 +139,7 @@ impl Parameters {
 
         let processors = num_cpus::get();
 
-        let subsample = (mtx.shape()[0] / 4) * 5;
+        let subsample = (mtx.shape()[0] / 5) * 4;
 
         let k = (((mtx.shape()[0] as f64).log10() * 2.) + 1.) as usize;
 
@@ -428,6 +428,26 @@ pub fn euclidean_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> 
     products
 }
 
+pub fn jaccard_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
+    let sanitized = sanitize(slice.to_owned());
+    let mut products = slice.dot(&slice.t());
+    // eprintln!("Products");
+    let mut geo = (&slice * &slice).sum_axis(Axis(1));
+    // eprintln!("geo");
+    geo.mapv_inplace(f64::sqrt);
+    for i in 0..slice.rows() {
+        for j in 0..slice.rows() {
+            products[[i,j]] /= (&geo[i] + &geo[j] - &products[[i,j]])
+        }
+    }
+    for i in 0..slice.rows() {
+        products[[i,i]] = 1.;
+    }
+    products
+}
+
+
+
 pub fn correlation_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let mut output = Array::zeros((slice.rows(),slice.rows()));
     for i in 0..slice.rows() {
@@ -456,6 +476,7 @@ pub enum Distance {
     Euclidean,
     Cosine,
     Correlation,
+    Jaccard,
 }
 
 impl Distance {
@@ -465,6 +486,7 @@ impl Distance {
             "euclidean" | "e" => Distance::Euclidean,
             "cosine" | "c" | "cos" => Distance::Cosine,
             "correlation" => Distance::Correlation,
+            "jaccard" => Distance::Jaccard,
             _ => {
                 eprintln!("Not a valid distance option, defaulting to cosine");
                 Distance::Cosine
@@ -489,10 +511,17 @@ impl Distance {
             Distance::Correlation => {
                 correlation(p1,p2)
             }
+            Distance::Jaccard => {
+                let dot_product = p1.dot(&p2);
+                let p1ss = p1.map(|x| x.powi(2)).sum().sqrt();
+                let p2ss = p2.map(|x| x.powi(2)).sum().sqrt();
+                1.0 - (dot_product / (p1ss + p2ss - dot_product))
+            }
         }
     }
 
     pub fn matrix(&self,p1:ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
+        eprintln!("Computing a distance matrix!");
         match self {
             Distance::Manhattan => {
 
@@ -515,6 +544,9 @@ impl Distance {
             }
             Distance::Correlation => {
                 correlation_matrix(p1)
+            }
+            Distance::Jaccard => {
+                jaccard_similarity_matrix(p1)
             }
         }
     }
