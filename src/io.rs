@@ -139,7 +139,7 @@ impl Parameters {
 
         let processors = num_cpus::get();
 
-        let subsample = (mtx.shape()[0] / 5) * 4;
+        let subsample = (mtx.shape()[0] / 10) * 9;
 
         let k = (((mtx.shape()[0] as f64).log10() * 2.) + 1.) as usize;
 
@@ -390,7 +390,7 @@ pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let sanitized = sanitize(slice.to_owned());
     let mut products = slice.dot(&slice.t());
     // eprintln!("Products");
-    let mut geo = (&slice * &slice).sum_axis(Axis(1));
+    let mut geo = (&slice * &slice).sum_axis(Axis(1)).mapv(|x| x.sqrt());
     // eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
     for i in 0..slice.rows() {
