@@ -27,6 +27,7 @@ pub struct Parameters {
     pub k: usize,
     pub subsample: usize,
     pub distance: Distance,
+    pub optimization: Optimization,
 
     count_array_file: String,
     distance_matrix_file: String,
@@ -48,6 +49,7 @@ impl Parameters {
             report_address: None,
             dump_error: None,
             distance: Distance::Cosine,
+            optimization: Optimization::Max,
 
             steps: 0,
             k: 0,
@@ -118,6 +120,9 @@ impl Parameters {
                 },
                 "-ss" | "-subsample" => {
                     arg_struct.subsample = args.next().expect("Error iterating subsample").parse::<usize>().expect("Error parsing subsample, not a number?")
+                },
+                "-optimize" => {
+                    arg_struct.optimization = args.next().map(|o| Optimization::parse(&o)).expect("Optimization option error")
                 },
 
                 &_ => {
@@ -468,6 +473,25 @@ fn argsort(input: &Vec<f64>) -> Vec<usize> {
     intermediate2.sort_unstable_by(|a,b| ((a.1).0).cmp(&(b.1).0));
     let out = intermediate2.iter().map(|x| x.0).collect();
     out
+}
+
+#[derive(Debug,Clone,Copy)]
+pub enum Optimization {
+    Max,
+    Min
+}
+
+impl Optimization {
+    pub fn parse(argument: &str) -> Optimization {
+        match &argument[..] {
+            "max" => Optimization::Max,
+            "min" => Optimization::Min,
+            _ => {
+                eprintln!("Not a valid optimizaiton option, choose max or min");
+                panic!();
+            }
+        }
+    }
 }
 
 #[derive(Debug,Clone,Copy)]

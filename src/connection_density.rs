@@ -1,4 +1,5 @@
 use io::Distance;
+use io::Optimization;
 use io::{array_mean,vec_mean};
 use ndarray::{Array,Ix1,Ix2,Ix3,Zip,Axis,ArrayView,stack};
 use std::sync::Arc;
@@ -37,7 +38,14 @@ impl Node {
         }
     }
 
-    pub fn connect_subsampled(&mut self, mut subsampled_indecies: Vec<usize>, mut distances: Vec<f64>) {
+    pub fn connect_subsampled_max(&mut self, mut subsampled_indecies: Vec<usize>, mut distances: Vec<f64>) {
+        let mut nearest_indecies = k_max(self.parameters.k,&distances);
+        let mut nearest_neighbors: Vec<usize> = nearest_indecies.iter().map(|i| subsampled_indecies[*i]).collect();
+        let mut nearest_similarities: Vec<f64> = nearest_indecies.iter().map(|i| distances[*i]).collect();
+        self.neighbors = nearest_neighbors;
+    }
+
+    pub fn connect_subsampled_min(&mut self, mut subsampled_indecies: Vec<usize>, mut distances: Vec<f64>) {
         let mut nearest_indecies = k_max(self.parameters.k,&distances);
         let mut nearest_neighbors: Vec<usize> = nearest_indecies.iter().map(|i| subsampled_indecies[*i]).collect();
         let mut nearest_similarities: Vec<f64> = nearest_indecies.iter().map(|i| distances[*i]).collect();
@@ -135,7 +143,14 @@ impl Graph {
         for i in 0..self.arena.len() {
             let indecies = self.subsampled_indices();
             let distances = indecies.iter().map(|&j| self.distance_matrix[[i,j]]).collect();
-            self.arena[i].connect_subsampled(indecies,distances);
+            match self.parameters.optimization {
+                Optimization::Max => {
+                    self.arena[i].connect_subsampled_max(indecies,distances);
+                }
+                Optimization::Min => {
+                    self.arena[i].connect_subsampled_min(indecies,distances);
+                }
+            }
         }
     }
 
@@ -401,6 +416,34 @@ fn k_max(k:usize,vec: &Vec<f64>) -> Vec<usize> {
     let mut insert_index = Some(0);
     for (i,x) in vec.iter().enumerate() {
         for (j,(_,y)) in queue.iter().enumerate().rev() {
+            if x > y {
+                break
+            }
+            else {
+                insert_index = Some(j)
+            }
+        }
+        if let Some(valid_index) = insert_index {
+            queue.insert(valid_index,(i,*x));
+            insert_index = None;
+            if queue.len() > k {
+                queue.pop();
+            }
+            else if queue.len() < k {
+                    insert_index = Some(queue.len())
+            }
+        }
+    }
+
+    queue.iter().map(|(x,y)| *x).collect()
+}
+
+fn k_min(k:usize,vec: &Vec<f64>) -> Vec<usize> {
+
+    let mut queue = Vec::with_capacity(k+1);
+    let mut insert_index = Some(0);
+    for (i,x) in vec.iter().enumerate() {
+        for (j,(_,y)) in queue.iter().enumerate().rev() {
             if x < y {
                 break
             }
@@ -488,15 +531,14 @@ mod tests {
     #[test]
     pub fn kmax() {
 
-        assert_eq!(vec![0,1,2],k_max(3,&vec![10.,9.,8.,7.,6.,5.,4.,3.,2.,1.,0.]));
-        assert_eq!(vec![4,5,6],k_max(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,2.,1.,0.]));
+        assert_eq!(vec![10,9,8],k_max(3,&vec![10.,9.,8.,7.,6.,5.,4.,3.,2.,1.,0.]));
+        assert_eq!(vec![10,9,8],k_max(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,2.,1.,0.]));
     }
 
-    #[test]
-    pub fn quick_weighted_pick() {
+    pub fn kmin() {
 
-        assert_eq!(vec![0,1,2],k_max(3,&vec![10.,9.,8.,7.,6.,5.,4.,3.,2.,1.,0.]));
-        assert_eq!(vec![4,5,6],k_max(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,2.,1.,0.]));
+        assert_eq!(vec![0,1,2],k_min(3,&vec![10.,9.,8.,7.,6.,5.,4.,3.,2.,1.,0.]));
+        assert_eq!(vec![0,1,2],k_min(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,2.,1.,0.]));
     }
 
 }
