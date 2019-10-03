@@ -8,7 +8,7 @@ use io::Parameters;
 use rand::{random,Rng,thread_rng};
 use rand::rngs::ThreadRng;
 use rand::seq::index::sample;
-use weighted_sampling::WBST;
+// use weighted_sampling::WBST;
 use std::hash::Hash;
 use std::cmp::Eq;
 use std::cmp::Ordering;
@@ -21,7 +21,7 @@ struct Node {
     id: usize,
     // coordinates: Array<f64,Ix1>,
     neighbors: Vec<usize>,
-    sampler: WBST<i64,usize>,
+    // sampler: WBST<i64,usize>,
     parameters: Arc<Parameters>,
 }
 
@@ -33,7 +33,7 @@ impl Node {
         Node {
             id: id,
             neighbors: vec![],
-            sampler: WBST::empty(),
+            // sampler: WBST::empty(),
             parameters: parameters,
         }
     }
@@ -198,11 +198,11 @@ impl Graph {
     }
 
 
-    pub fn pick_step(&self, start:usize,rng:&mut ThreadRng) -> Option<usize> {
-        let neighbor_index = &self.arena[start].sampler.draw_replace_rng(rng);
-        let pick = neighbor_index.map(|(weight,index)| self.arena[start].neighbors[index]);
-        pick
-    }
+    // pub fn pick_step(&self, start:usize,rng:&mut ThreadRng) -> Option<usize> {
+    //     let neighbor_index = &self.arena[start].sampler.draw_replace_rng(rng);
+    //     let pick = neighbor_index.map(|(weight,index)| self.arena[start].neighbors[index]);
+    //     pick
+    // }
 
     pub fn highest_density_neighbor(&self,start:usize) -> Option<usize> {
         let max_neighbor_index = self.arena[start].neighbors
@@ -214,10 +214,10 @@ impl Graph {
         max_neighbor_index.map(|i| self.arena[start].neighbors[i])
     }
 
-    pub fn stochastic_weighted_neighbor(&self,start:usize,rng:&mut ThreadRng) -> Option<usize> {
-        let neighbor_index = self.arena[start].sampler.draw_replace_rng(rng);
-        neighbor_index.map(|(w,i)| self.arena[start].neighbors[i])
-    }
+    // pub fn stochastic_weighted_neighbor(&self,start:usize,rng:&mut ThreadRng) -> Option<usize> {
+    //     let neighbor_index = self.arena[start].sampler.draw_replace_rng(rng);
+    //     neighbor_index.map(|(w,i)| self.arena[start].neighbors[i])
+    // }
 
     pub fn distance(&self) -> Distance {
         self.parameters.distance
@@ -244,13 +244,13 @@ impl Graph {
 
     }
 
-    pub fn set_samplers(&mut self) {
-        let densities = &self.density;
-        for node in self.arena.iter_mut() {
-            let mut neighbor_densities = node.neighbors.iter().map(|i| densities[*i] as i64).collect();
-            node.sampler = WBST::<i64,usize>::index_tree(&neighbor_densities);
-        }
-    }
+    // pub fn set_samplers(&mut self) {
+    //     let densities = &self.density;
+    //     for node in self.arena.iter_mut() {
+    //         let mut neighbor_densities = node.neighbors.iter().map(|i| densities[*i] as i64).collect();
+    //         node.sampler = WBST::<i64,usize>::index_tree(&neighbor_densities);
+    //     }
+    // }
 
     pub fn smooth_density(&mut self) -> Array<usize,Ix1> {
         let mut new_density: Array<usize,Ix1> = Array::zeros(self.arena.len());
@@ -310,24 +310,24 @@ impl Wanderer {
 
     }
 
-    pub fn stochastic_step(&mut self, graph: Arc<Graph>,rng:&mut ThreadRng) -> Option<usize> {
-
-        if let None = self.converged(&graph) {
-            let step = graph.stochastic_weighted_neighbor(self.current_node, rng);
-            if let Some(next) = step {
-                self.current_node = next;
-                let density = graph.density[self.current_node];
-                self.density_history.push_back((self.current_node,graph.density[self.current_node]));
-                if self.density_history.len() > HISTORY_SIZE {
-                    self.density_history.pop_front();
-                }
-                if self.max_density < density { self.max_density = density};
-            }
-            step
-        }
-        else { None }
-
-    }
+    // pub fn stochastic_step(&mut self, graph: Arc<Graph>,rng:&mut ThreadRng) -> Option<usize> {
+    //
+    //     if let None = self.converged(&graph) {
+    //         let step = graph.stochastic_weighted_neighbor(self.current_node, rng);
+    //         if let Some(next) = step {
+    //             self.current_node = next;
+    //             let density = graph.density[self.current_node];
+    //             self.density_history.push_back((self.current_node,graph.density[self.current_node]));
+    //             if self.density_history.len() > HISTORY_SIZE {
+    //                 self.density_history.pop_front();
+    //             }
+    //             if self.max_density < density { self.max_density = density};
+    //         }
+    //         step
+    //     }
+    //     else { None }
+    //
+    // }
 
     pub fn current(&self) -> usize {
         self.current_node

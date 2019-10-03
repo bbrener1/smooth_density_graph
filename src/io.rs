@@ -456,7 +456,7 @@ pub fn jaccard_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let sanitized = sanitize(slice.to_owned());
     let mut products = slice.dot(&slice.t());
     // eprintln!("Products");
-    let mut geo = (&slice * &slice).sum_axis(Axis(1));
+    let mut geo = (&slice * &slice).sum_axis(Axis(1)).mapv(|x| x.sqrt());
     // eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
     for i in 0..slice.rows() {

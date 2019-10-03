@@ -7,7 +7,7 @@ use std::fs::OpenOptions;
 
 extern crate rand;
 extern crate num_cpus;
-extern crate weighted_sampling;
+// extern crate weighted_sampling;
 
 #[macro_use]
 extern crate ndarray;
