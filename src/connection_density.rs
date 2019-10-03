@@ -46,7 +46,7 @@ impl Node {
     }
 
     pub fn connect_subsampled_min(&mut self, mut subsampled_indecies: Vec<usize>, mut distances: Vec<f64>) {
-        let mut nearest_indecies = k_max(self.parameters.k,&distances);
+        let mut nearest_indecies = k_min(self.parameters.k,&distances);
         let mut nearest_neighbors: Vec<usize> = nearest_indecies.iter().map(|i| subsampled_indecies[*i]).collect();
         let mut nearest_similarities: Vec<f64> = nearest_indecies.iter().map(|i| distances[*i]).collect();
         self.neighbors = nearest_neighbors;
@@ -416,7 +416,7 @@ fn k_max(k:usize,vec: &Vec<f64>) -> Vec<usize> {
     let mut insert_index = Some(0);
     for (i,x) in vec.iter().enumerate() {
         for (j,(_,y)) in queue.iter().enumerate().rev() {
-            if x > y {
+            if x < y {
                 break
             }
             else {
@@ -444,7 +444,7 @@ fn k_min(k:usize,vec: &Vec<f64>) -> Vec<usize> {
     let mut insert_index = Some(0);
     for (i,x) in vec.iter().enumerate() {
         for (j,(_,y)) in queue.iter().enumerate().rev() {
-            if x < y {
+            if x > y {
                 break
             }
             else {
@@ -531,14 +531,17 @@ mod tests {
     #[test]
     pub fn kmax() {
 
-        assert_eq!(vec![10,9,8],k_max(3,&vec![10.,9.,8.,7.,6.,5.,4.,3.,2.,1.,0.]));
-        assert_eq!(vec![10,9,8],k_max(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,2.,1.,0.]));
+        assert_eq!(vec![0,1,2],k_max(3,&vec![10.,9.,8.,7.,6.,5.,4.,3.,2.,1.,0.]));
+        assert_eq!(vec![4,5,6],k_max(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,2.,1.,0.]));
+        assert_eq!(vec![4,5,6],k_max(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,-2.,-1.,0.]));
+
     }
 
     pub fn kmin() {
 
-        assert_eq!(vec![0,1,2],k_min(3,&vec![10.,9.,8.,7.,6.,5.,4.,3.,2.,1.,0.]));
-        assert_eq!(vec![0,1,2],k_min(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,2.,1.,0.]));
+        assert_eq!(vec![10,9,8],k_min(3,&vec![10.,9.,8.,7.,6.,5.,4.,3.,2.,1.,0.]));
+        assert_eq!(vec![10,9,8],k_min(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,2.,1.,0.]));
+        assert_eq!(vec![10,9,8],k_min(3,&vec![7.,6.,5.,4.,10.,9.,8.,3.,-2.,-1.,0.]));
     }
 
 }

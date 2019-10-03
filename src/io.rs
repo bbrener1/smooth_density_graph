@@ -121,7 +121,7 @@ impl Parameters {
                 "-ss" | "-subsample" => {
                     arg_struct.subsample = args.next().expect("Error iterating subsample").parse::<usize>().expect("Error parsing subsample, not a number?")
                 },
-                "-optimize" => {
+                "-optimize" | "-optimization" => {
                     arg_struct.optimization = args.next().map(|o| Optimization::parse(&o)).expect("Optimization option error")
                 },
 
@@ -395,7 +395,8 @@ pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let sanitized = sanitize(slice.to_owned());
     let mut products = slice.dot(&slice.t());
     // eprintln!("Products");
-    let mut geo = (&slice * &slice).sum_axis(Axis(1)).mapv(|x| x.sqrt());
+    // let mut geo = (&slice * &slice).sum_axis(Axis(1)).mapv(|x| x.sqrt());
+    let mut geo = (&slice * &slice).sum_axis(Axis(1));
     // eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
     for i in 0..slice.rows() {
@@ -437,7 +438,7 @@ pub fn jaccard_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let sanitized = sanitize(slice.to_owned());
     let mut products = slice.dot(&slice.t());
     // eprintln!("Products");
-    let mut geo = (&slice * &slice).sum_axis(Axis(1)).mapv(|x| x.sqrt());
+    let mut geo = (&slice * &slice).sum_axis(Axis(1));
     // eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
     for i in 0..slice.rows() {

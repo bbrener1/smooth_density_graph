@@ -98,7 +98,7 @@ mod tests {
     use ndarray::prelude::*;
 
     pub fn example_graph() -> Graph {
-        let a = (0..100).map(|x| x as f64).collect();
+        let a = (0..100).map(|x| (x - 50) as f64).collect();
         let mut p = Parameters::from_vec((25,4), a, 3, 5);
         let points = p.counts.clone().unwrap();
         p.distance_matrix = Some(p.distance.matrix(p.counts.take().unwrap().view()));
