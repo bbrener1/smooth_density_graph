@@ -40,7 +40,13 @@ def fit_predict(targets,command="fitpredict",auto=True,precomputed=False,verbose
     #
     # table_pipe.seek(0)
 
-    path_to_rust = (Path(__file__).parent / "target/release/smooth_density_graph").resolve()
+    try:
+        path_to_rust = (Path(__file__).parent / "target/release/smooth_density_graph").resolve()
+    except:
+        try:
+            path_to_rust = (Path(__file__).parent / "../target/release/smooth_density_graph").resolve()
+        except:
+            raise Exception
 
     print("Running " + str(path_to_rust))
     # print(str(precomputed))
