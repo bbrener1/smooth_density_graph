@@ -48,7 +48,7 @@ impl Parameters {
             distance_matrix: None,
             report_address: None,
             dump_error: None,
-            distance: Distance::Cosine,
+            distance: Distance::NormCosine,
             optimization: Optimization::Max,
 
             steps: 0,
@@ -390,8 +390,26 @@ pub fn sanitize(mut input: Array<f64,Ix2>) -> Array<f64,Ix2> {
     else { input }
 }
 
-
 pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
+    let sanitized = sanitize(slice.to_owned());
+    let mut products = slice.dot(&slice.t());
+    // eprintln!("Products");
+    let mut geo = (&slice * &slice).sum_axis(Axis(1)).mapv(|x| x.sqrt());
+    // eprintln!("geo");
+    geo.mapv_inplace(f64::sqrt);
+    for i in 0..slice.rows() {
+        for j in 0..slice.rows() {
+            products[[i,j]] /= (&geo[i] * &geo[j])
+        }
+    }
+    for i in 0..slice.rows() {
+        products[[i,i]] = 1.;
+    }
+    products
+}
+
+
+pub fn norm_cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let sanitized = sanitize(slice.to_owned());
     let mut products = slice.dot(&slice.t());
     // eprintln!("Products");
@@ -500,6 +518,7 @@ pub enum Distance {
     Manhattan,
     Euclidean,
     Cosine,
+    NormCosine,
     Correlation,
     Jaccard,
 }
@@ -510,6 +529,7 @@ impl Distance {
             "manhattan" | "m" | "cityblock" => Distance::Manhattan,
             "euclidean" | "e" => Distance::Euclidean,
             "cosine" | "c" | "cos" => Distance::Cosine,
+            "ncos" | "norm_cosine" => Distance::NormCosine,
             "correlation" => Distance::Correlation,
             "jaccard" => Distance::Jaccard,
             _ => {
@@ -531,6 +551,12 @@ impl Distance {
                 let dot_product = p1.dot(&p2);
                 let p1ss = p1.map(|x| x.powi(2)).sum().sqrt();
                 let p2ss = p2.map(|x| x.powi(2)).sum().sqrt();
+                1.0 - (dot_product / (p1ss * p2ss))
+            }
+            Distance::NormCosine => {
+                let dot_product = p1.dot(&p2);
+                let p1ss = p1.map(|x| x.powi(2)).sum();
+                let p2ss = p2.map(|x| x.powi(2)).sum();
                 1.0 - (dot_product / (p1ss * p2ss))
             }
             Distance::Correlation => {
@@ -566,7 +592,10 @@ impl Distance {
             },
             Distance::Cosine => {
                 cosine_similarity_matrix(p1)
-            }
+            },
+            Distance::NormCosine => {
+                norm_cosine_similarity_matrix(p1)
+            },
             Distance::Correlation => {
                 correlation_matrix(p1)
             }
