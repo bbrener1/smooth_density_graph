@@ -419,8 +419,8 @@ pub fn norm_cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2
     geo.mapv_inplace(f64::sqrt);
     for i in 0..slice.rows() {
         for j in 0..slice.rows() {
-            // products[[i,j]] /= (&geo[i] * &geo[j])
-            products[[i,j]] /= geo[i].max(geo[j])
+            products[[i,j]] /= (&geo[i] * &geo[j])
+            // products[[i,j]] /= geo[i].max(geo[j])
         }
     }
     for i in 0..slice.rows() {
