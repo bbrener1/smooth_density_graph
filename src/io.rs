@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use num_cpus;
 use std::f64;
 use std::fmt::Debug;
-use rayon::iter::IntoParallelIterator;
+use rayon::prelude::*;
 use std::cmp::Ordering;
 
 use ndarray::{Array,ArrayView,Ix1,Ix2,Axis};
@@ -48,7 +48,7 @@ impl Parameters {
             distance_matrix: None,
             report_address: None,
             dump_error: None,
-            distance: Distance::NormCosine,
+            distance: Distance::Cosine,
             optimization: Optimization::Max,
 
             steps: 0,
@@ -394,39 +394,26 @@ pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let sanitized = sanitize(slice.to_owned());
     let mut products = slice.dot(&slice.t());
     // eprintln!("Products");
-    let mut geo = (&slice * &slice).sum_axis(Axis(1)).mapv(|x| x.sqrt());
-    // eprintln!("geo");
-    geo.mapv_inplace(f64::sqrt);
-    for i in 0..slice.rows() {
-        for j in 0..slice.rows() {
-            products[[i,j]] /= (&geo[i] * &geo[j])
-        }
-    }
-    for i in 0..slice.rows() {
-        products[[i,i]] = 1.;
-    }
-    products
-}
-
-
-pub fn norm_cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
-    let sanitized = sanitize(slice.to_owned());
-    let mut products = slice.dot(&slice.t());
-    // eprintln!("Products");
-    // let mut geo = (&slice * &slice).sum_axis(Axis(1)).mapv(|x| x.sqrt());
     let mut geo = (&slice * &slice).sum_axis(Axis(1));
     // eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
+
+    let coordinates: Vec<(usize,usize)> = (0..slice.rows()).flat_map(|i| (0..slice.rows()).map(move |j| (i,j))).collect();
+
+    let flat_dist: Vec<f64> = coordinates
+        .into_par_iter()
+        .map(|(i,j)| {
+            (products[[i,j]] / (&geo[i] * &geo[j]))
+        })
+        .collect();
+
+    let mut distances = Array::from_shape_vec((slice.rows(),slice.rows()),flat_dist).unwrap();
+
     for i in 0..slice.rows() {
-        for j in 0..slice.rows() {
-            products[[i,j]] /= (&geo[i] * &geo[j])
-            // products[[i,j]] /= geo[i].max(geo[j])
-        }
+        distances[[i,i]] = 1.;
     }
-    for i in 0..slice.rows() {
-        products[[i,i]] = 1.;
-    }
-    products
+    distances
+
 }
 
 
@@ -460,15 +447,22 @@ pub fn jaccard_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let mut geo = (&slice * &slice).sum_axis(Axis(1)).mapv(|x| x.sqrt());
     // eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
+
+    let coordinates: Vec<(usize,usize)> = (0..slice.rows()).flat_map(|i| (0..slice.rows()).map(move |j| (i,j))).collect();
+
+    let flat_dist: Vec<f64> = coordinates
+        .into_par_iter()
+        .map(|(i,j)| {
+            (products[[i,j]] / (&geo[i] + &geo[j] - &products[[i,j]]))
+        })
+        .collect();
+
+    let mut distances = Array::from_shape_vec((slice.rows(),slice.rows()),flat_dist).unwrap();
+
     for i in 0..slice.rows() {
-        for j in 0..slice.rows() {
-            products[[i,j]] /= (&geo[i] + &geo[j] - &products[[i,j]])
-        }
+        distances[[i,i]] = 1.;
     }
-    for i in 0..slice.rows() {
-        products[[i,i]] = 1.;
-    }
-    products
+    distances
 }
 
 
@@ -519,7 +513,6 @@ pub enum Distance {
     Manhattan,
     Euclidean,
     Cosine,
-    NormCosine,
     Correlation,
     Jaccard,
 }
@@ -530,7 +523,6 @@ impl Distance {
             "manhattan" | "m" | "cityblock" => Distance::Manhattan,
             "euclidean" | "e" => Distance::Euclidean,
             "cosine" | "c" | "cos" => Distance::Cosine,
-            "ncos" | "norm_cosine" => Distance::NormCosine,
             "correlation" => Distance::Correlation,
             "jaccard" => Distance::Jaccard,
             _ => {
@@ -552,12 +544,6 @@ impl Distance {
                 let dot_product = p1.dot(&p2);
                 let p1ss = p1.map(|x| x.powi(2)).sum().sqrt();
                 let p2ss = p2.map(|x| x.powi(2)).sum().sqrt();
-                1.0 - (dot_product / (p1ss * p2ss))
-            }
-            Distance::NormCosine => {
-                let dot_product = p1.dot(&p2);
-                let p1ss = p1.map(|x| x.powi(2)).sum();
-                let p2ss = p2.map(|x| x.powi(2)).sum();
                 1.0 - (dot_product / (p1ss * p2ss))
             }
             Distance::Correlation => {
@@ -593,9 +579,6 @@ impl Distance {
             },
             Distance::Cosine => {
                 cosine_similarity_matrix(p1)
-            },
-            Distance::NormCosine => {
-                norm_cosine_similarity_matrix(p1)
             },
             Distance::Correlation => {
                 correlation_matrix(p1)
