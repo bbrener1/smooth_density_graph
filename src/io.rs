@@ -403,9 +403,6 @@ pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let flat_dist: Vec<f64> = coordinates
         .into_par_iter()
         .map(|(i,j)| {
-            if i%10 == 0 {
-                eprintln!("D:{:?}",i);
-            };
             (products[[i,j]] / (&geo[i] * &geo[j]))
         })
         .collect();
