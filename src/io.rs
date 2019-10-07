@@ -421,21 +421,6 @@ pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     }
     distances
 
-    // let sanitized = sanitize(slice.to_owned());
-    // let mut products = slice.dot(&slice.t());
-    // // eprintln!("Products");
-    // let mut geo = (&slice * &slice).sum_axis(Axis(1));
-    // // eprintln!("geo");
-    // geo.mapv_inplace(f64::sqrt);
-    // for i in 0..slice.rows() {
-    //     for j in 0..slice.rows() {
-    //         products[[i,j]] /= (&geo[i] * &geo[j])
-    //     }
-    // }
-    // for i in 0..slice.rows() {
-    //     products[[i,i]] = 1.;
-    // }
-    // products
 }
 
 
@@ -473,14 +458,18 @@ pub fn jaccard_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
 
     let coordinates: Vec<(usize,usize)> = (0..slice.rows()).flat_map(|i| (0..slice.rows()).map(move |j| (i,j))).collect();
 
-    let flat_dist: Vec<f64> = coordinates
+    let flat_dist: Vec<(usize,usize,f64)> = coordinates
         .into_par_iter()
         .map(|(i,j)| {
-            (products[[i,j]] / (&geo[i] + &geo[j] - &products[[i,j]]))
+            (i,j,(products[[i,j]] / (&geo[i] + &geo[j] - &products[[i,j]])))
         })
         .collect();
 
-    let mut distances = Array::from_shape_vec((slice.rows(),slice.rows()),flat_dist).unwrap();
+    let mut distances = Array::zeros((slice.rows(),slice.rows()));
+
+    for (i,j,d) in flat_dist {
+        distances[[i,j]] = d;
+    }
 
     for i in 0..slice.rows() {
         distances[[i,i]] = 1.;
