@@ -400,14 +400,19 @@ pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
 
     let coordinates: Vec<(usize,usize)> = (0..slice.rows()).flat_map(|i| (0..slice.rows()).map(move |j| (i,j))).collect();
 
-    let mut distances = Array::zeros((slice.rows(),slice.rows()));
 
-    let flat_dist: Vec<f64> = coordinates
+    let flat_dist: Vec<(usize,usize,f64)> = coordinates
         .into_par_iter()
         .map(|(i,j)| {
-            distances[[i,j]] = (products[[i,j]] / (&geo[i] * &geo[j]))
+            (i,j,(products[[i,j]] / (&geo[i] * &geo[j])))
         })
         .collect();
+
+    let mut distances = Array::zeros((slice.rows(),slice.rows()));
+
+    for (i,j,d) in flat_dist {
+        distances[[i,j]] = d;
+    }
 
     // let mut distances = Array::from_shape_vec((slice.rows(),slice.rows()),flat_dist).unwrap();
 
