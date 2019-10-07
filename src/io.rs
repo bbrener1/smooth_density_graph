@@ -412,7 +412,7 @@ pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     for i in 0..slice.rows() {
         distances[[i,i]] = 1.;
     }
-    distances.reversed_axes()
+    distances
 
 }
 
@@ -463,7 +463,7 @@ pub fn jaccard_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     for i in 0..slice.rows() {
         distances[[i,i]] = 1.;
     }
-    distances.reversed_axes()
+    distances
 }
 
 
