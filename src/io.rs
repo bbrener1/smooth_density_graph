@@ -391,44 +391,44 @@ pub fn sanitize(mut input: Array<f64,Ix2>) -> Array<f64,Ix2> {
 }
 
 pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
-    // let sanitized = sanitize(slice.to_owned());
-    // let mut products = slice.dot(&slice.t());
-    // // eprintln!("Products");
-    // let mut geo = (&slice * &slice).sum_axis(Axis(1));
-    // // eprintln!("geo");
-    // geo.mapv_inplace(f64::sqrt);
-    //
-    // let coordinates: Vec<(usize,usize)> = (0..slice.rows()).flat_map(|i| (0..slice.rows()).map(move |j| (i,j))).collect();
-    //
-    // let flat_dist: Vec<f64> = coordinates
-    //     .into_par_iter()
-    //     .map(|(i,j)| {
-    //         (products[[i,j]] / (&geo[i] * &geo[j]))
-    //     })
-    //     .collect();
-    //
-    // let mut distances = Array::from_shape_vec((slice.rows(),slice.rows()),flat_dist).unwrap();
-    //
-    // for i in 0..slice.rows() {
-    //     distances[[i,i]] = 1.;
-    // }
-    // distances
-    
     let sanitized = sanitize(slice.to_owned());
     let mut products = slice.dot(&slice.t());
     // eprintln!("Products");
     let mut geo = (&slice * &slice).sum_axis(Axis(1));
     // eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
+
+    let coordinates: Vec<(usize,usize)> = (0..slice.rows()).flat_map(|i| (0..slice.rows()).map(move |j| (i,j))).collect();
+
+    let flat_dist: Vec<f64> = coordinates
+        .into_par_iter()
+        .map(|(i,j)| {
+            (products[[i,j]] / (&geo[i] * &geo[j]))
+        })
+        .collect();
+
+    let mut distances = Array::from_shape_vec((slice.rows(),slice.rows()),flat_dist).unwrap();
+
     for i in 0..slice.rows() {
-        for j in 0..slice.rows() {
-            products[[i,j]] /= (&geo[i] * &geo[j])
-        }
+        distances[[i,i]] = 1.;
     }
-    for i in 0..slice.rows() {
-        products[[i,i]] = 1.;
-    }
-    products
+    distances
+
+    // let sanitized = sanitize(slice.to_owned());
+    // let mut products = slice.dot(&slice.t());
+    // // eprintln!("Products");
+    // let mut geo = (&slice * &slice).sum_axis(Axis(1));
+    // // eprintln!("geo");
+    // geo.mapv_inplace(f64::sqrt);
+    // for i in 0..slice.rows() {
+    //     for j in 0..slice.rows() {
+    //         products[[i,j]] /= (&geo[i] * &geo[j])
+    //     }
+    // }
+    // for i in 0..slice.rows() {
+    //     products[[i,i]] = 1.;
+    // }
+    // products
 }
 
 
