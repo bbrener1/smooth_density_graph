@@ -400,7 +400,6 @@ pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
 
     let coordinates: Vec<(usize,usize)> = (0..slice.rows()).flat_map(|i| (0..slice.rows()).map(move |j| (i,j))).collect();
 
-
     let flat_dist: Vec<(usize,usize,f64)> = coordinates
         .into_par_iter()
         .map(|(i,j)| {
@@ -572,7 +571,7 @@ impl Distance {
 
     pub fn matrix(&self,p1:ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
         eprintln!("Computing a distance matrix!");
-        match self {
+        let matrix = match self {
             Distance::Manhattan => {
 
                 let mut mtx = Array::zeros((p1.rows(),p1.rows()));
@@ -598,8 +597,13 @@ impl Distance {
             Distance::Jaccard => {
                 jaccard_similarity_matrix(p1)
             }
+        };
+        if matrix.iter().any(|x| !x.is_finite()) {
+            panic!("NaN distance");
         }
+        matrix
     }
+
 }
 
 
