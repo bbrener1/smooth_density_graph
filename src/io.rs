@@ -371,7 +371,7 @@ pub fn sanitize(mut input: Array<f64,Ix2>) -> Array<f64,Ix2> {
     // let sums = input.sum_axis(Axis(0));
     let non_zero: Vec<bool> = input.axis_iter(Axis(1)).map(|a| a.iter().any(|v| v.abs() > 0.)).collect();
     // let non_zero = sums.iter().map(|x| if *x > 0. {1} else {0}).sum::<usize>();
-    if non_zero.iter().any(|x| *x) {
+    if non_zero.iter().any(|x| *!x) {
         let nz_indices: Vec<usize> = non_zero.iter().enumerate().flat_map(|(i,b)| if *b {Some(i)} else {None}).collect();
         eprintln!("WARNING: This input isn't sanitized, some features are all 0. We recommend using sanitized data");
         eprintln!("Sums:{:?}",nz_indices.len());
