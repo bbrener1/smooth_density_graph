@@ -3,25 +3,25 @@ import matplotlib.pyplot as plt
 
 from scipy.spatial.distance import pdist, squareform
 
-def knn(mtx,n,metric='cosine'):
+def knn(mtx,k,metric='cosine'):
     dist = squareform(pdist(mtx,metric=metric))
 
     ranks = np.zeros((mtx.shape[0],mtx.shape[0]),dtype=int)
     for i in range(mtx.shape[0]):
         ranks[i][np.argsort(dist[i])] = np.arange(dist.shape[1])
-    boolean = ranks < (n+1)
+    boolean = ranks < (k+1)
     boolean[np.identity(boolean.shape[0],dtype=bool)] = False
     return boolean
 
 
-def sub_knn(mtx,sub=.5,n=10,intercon=10,metric='cosine'):
+def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine'):
     intercon = 10
     connectivity = np.zeros((intercon,mtx.shape[0],mtx.shape[0]),dtype=bool)
     for i in range(intercon):
         mask = np.random.random(mtx.shape[0]) < sub
         double_mask = np.outer(mask,mask)
         sub_mtx = mtx[mask]
-        sub_connectivity = knn(sub_mtx,n,metric=metric)
+        sub_connectivity = knn(sub_mtx,k,metric=metric)
         connectivity[i][double_mask] = sub_connectivity.flatten()
 
     for i in range(0,1000000,11):
@@ -32,8 +32,8 @@ def sub_knn(mtx,sub=.5,n=10,intercon=10,metric='cosine'):
     return connectivity
 
 
-def fit_predict(mtx,cycles=10,sub=.3,n=10,metric='cosine',intercon=10,coordinates=None,no_plot=False):
-    connectivity = sub_knn(mtx,sub=.5,intercon=intercon,n=n,metric=metric)
+def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',intercon=10,coordinates=None,no_plot=False):
+    connectivity = sub_knn(mtx,sub=.5,intercon=intercon,k=k,metric=metric)
     final_index = -1 * np.ones(mtx.shape[0],dtype=int)
     density_estimate = np.ones(mtx.shape[0])
 
