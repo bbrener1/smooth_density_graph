@@ -32,7 +32,7 @@ def sub_knn(mtx,sub=.5,n=10,intercon=10,metric='cosine'):
     return connectivity
 
 
-def fit_transform(mtx,cycles=10,sub=.3,n=10,metric='cosine',intercon=10,coordinates=None,no_plot=False):
+def fit_predict(mtx,cycles=10,sub=.3,n=10,metric='cosine',intercon=10,coordinates=None,no_plot=False):
     connectivity = sub_knn(mtx,sub=.5,intercon=intercon,n=n,metric=metric)
     final_index = -1 * np.ones(mtx.shape[0],dtype=int)
     density_estimate = np.ones(mtx.shape[0])
