@@ -1,142 +1,102 @@
 import numpy as np
-import sys
-import os
-import tempfile as tmp
-from pathlib import Path
-import io
-import argparse
-from time import sleep
-import subprocess as sp
-from threading import Thread
-from queue import Queue, Empty
-# import asyncio as aio
-import numpy as np
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
-def main():
-    print("Running main")
-    counts = np.loadtxt(sys.argv[1])
-    fit_predict(counts,scaling=.1,sample_sub=10)
+from scipy.spatial.distance import pdist, squareform
 
-def fit_predict(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs):
+def knn(mtx,n,metric='cosine'):
+    dist = squareform(pdist(mtx,metric=metric))
 
-    # np.array(targets)
-    targets = targets.astype(dtype=float)
-
-    targets = "\n".join(["\t".join([str(y) for y in x]) for x in targets]) + "\n"
+    ranks = np.zeros((mtx.shape[0],mtx.shape[0]),dtype=int)
+    for i in range(mtx.shape[0]):
+        ranks[i][np.argsort(dist[i])] = np.arange(dist.shape[1])
+    boolean = ranks < (n+1)
+    boolean[np.identity(boolean.shape[0],dtype=bool)] = False
+    return boolean
 
 
-    input_temp = tmp.NamedTemporaryFile()
-    progress_temp = tmp.NamedTemporaryFile()
-    # final_pos_temp = tmp.NamedTemporaryFile()
+def sub_knn(mtx,sub=.5,n=10,intercon=10,metric='cosine'):
+    intercon = 10
+    connectivity = np.zeros((intercon,mtx.shape[0],mtx.shape[0]),dtype=bool)
+    for i in range(intercon):
+        mask = np.random.random(mtx.shape[0]) < sub
+        double_mask = np.outer(mask,mask)
+        sub_mtx = mtx[mask]
+        sub_connectivity = knn(sub_mtx,n,metric=metric)
+        connectivity[i][double_mask] = sub_connectivity.flatten()
 
-    input_writer = open(input_temp.name,mode='w')
-    input_writer.write(targets)
-    input_writer.close()
+    for i in range(0,1000000,11):
+        segment_x = i%connectivity.shape[1]
+        segment_y = (int(i/connectivity.shape[1]))%connectivity.shape[2]
+        np.random.shuffle(connectivity[:,segment_x:segment_x+37,segment_y:segment_y+37])
 
-    # print(targets)
+    return connectivity
 
-    # table_pipe = io.StringIO(targets)
-    #
-    # table_pipe.seek(0)
 
-    path_to_rust = (Path(__file__).parent / "target/release/smooth_density_graph").resolve()
-    if not os.path.exists(path_to_rust):
-        path_to_rust = (Path(__file__).parent / "../target/release/smooth_density_graph").resolve()
-    if not os.path.exists(path_to_rust):
-        raise Exception
+def fit_transform(mtx,cycles=10,sub=.3,n=10,metric='cosine',intercon=10,coordinates=None):
+    connectivity = sub_knn(mtx,sub=.5,intercon=intercon,n=n,metric=metric)
+    final_index = -1 * np.ones(mtx.shape[0],dtype=int)
+    density_estimate = np.ones(mtx.shape[0])
 
-    print("Running " + str(path_to_rust))
-    # print(str(precomputed))
-    # if precomputed:
-    #     print("WHY IS PRECOMPUTED TRUE?")
-    # else:
-    #     print("PRECOMPUTED IS FALSE")
+    running_connectivity = np.identity(counts.shape[0])
+    for i in range(cycles):
+        print(f"Estimating density:{i}")
+        running_connectivity = np.dot(running_connectivity,skc[i%connectivity.shape[0]])
 
-    arg_list = []
-    if backtrace:
-        arg_list.append("RUST_BACKTRACE=1")
-    arg_list.extend([str(path_to_rust),command])
-    if precomputed:
-        arg_list.extend(["-dm",input_temp.name])
+    density = np.sum(running_connectivity,axis=0)
+
+    if coordinates is None:
+        tc = TSNE().fit_transform(mtx)
     else:
-        arg_list.extend(["-c",input_temp.name])
-    if auto:
-        arg_list.append("-auto")
-    for key,value in kwargs.items():
-        arg_list.extend(["-"+str(key),str(value)])
-    # # arg_list.extend(["-stdin"])
-    # # arg_list.extend(["-stdout"])
-    # # if verbose:
-    # #     arg_list.extend(["-verbose"])
-    # if steps is not None:
-    #     arg_list.extend(["-steps",str(steps)])
-    # if subsample is not None:
-    #     arg_list.extend(["-ss",str(subsample)])
-    # if k is not None:
-    #     arg_list.extend(["-k",str(k)])
-    # if distance is not None:
-    #     arg_list.extend(["-d",str(distance)])
-    arg_list.extend(["2>"+progress_temp.name])
+        tc = coordinates
 
-    print("Command: " + " ".join(arg_list))
+    plt.figure()
+    plt.title("Density Estimate")
+    plt.scatter(tc[:,0],tc[:,1],s=1,c=np.log(density + 1))
+    plt.show()
 
-    # print("Peek at input:")
-    # print(open(input_temp.name,mode='r').read())
+    density_ranked_samples = np.argsort(density)
 
-    # cp = sp.Popen(arg_list,stdin=sp.PIPE,stdout=sp.PIPE,stderr=sp.PIPE)
-    cp = sp.Popen(" ".join(arg_list),stdout=sp.PIPE,universal_newlines=True,shell=True)
+    fully_connected = knn(mtx,n,metric=metric)
+    fully_connected = np.logical_or(fully_connected,np.any(connectivity,axis=0))
 
-    # cp.stdin.write(targets.encode())
+    def ascend(index,connectivity,density,cache):
+        ar = np.arange(connectivity.shape[1])
+        current_index = index
+        history = []
+        for i in range(1000):
+            if cache[current_index] > 0:
+                current_index = cache[current_index]
+                break
+            neighbors = ar[connectivity[current_index]]
+            neighbor_densities = density[neighbors]
+            max_ndi = np.argmax(neighbor_densities)
+            own_density = density[current_index]
+            if own_density < neighbor_densities[max_ndi]:
+                history.append(current_index)
+                current_index = neighbors[max_ndi]
+            else:
+                break
+        return current_index,history
 
-    # cp = sp.run(arg_list,input=targets,stdout=sp.PIPE,stderr=sp.PIPE,universal_newlines=True)
-    # cp = sp.run(" ".join(arg_list),input=targets,stdout=sp.PIPE,stderr=sp.PIPE,universal_newlines=True,shell=True)
+    for i,sample in enumerate(density_ranked_samples):
+        if i%100 == 0:
+            print(f"Routing sample: {i}")
+        destination,history = ascend(sample,fully_connected,density,final_index)
+        final_index[sample] = destination
+        final_index[np.array(history,dtype=int)] = destination
 
-    # while True:
-    #     # sleep(0.1)
-    #     rc = cp.poll()
-    #     if rc is not None:
-    #         for line in cp.stderr.readlines():
-    #             sleep(.001)
-    #             print(line)
-    #         break
-    #     output = cp.stderr.readline()
-    #     # print("Read line")
-    #     print(output.strip())
-    #
 
-    progress_counter = 0
+    print("Final clusters:")
+    for final_cluster in set(final_index):
+        print(final_cluster,np.sum(final_index == final_cluster))
 
-    while cp.poll() is None:
-        sleep(.01)
-        line = progress_temp.readline()
-        if verbose and line != b"":
-            print(line,flush=True)
-            # print(line.count(b's:'),flush=True)
-        #     progress_counter += line.count(b's:')
-        #     print(f"Points descended:{progress_counter}",flush=True)
-        # else:
-        # if not verbose:
-        #     progress_counter += line.count(b's:')
-        #     if b"Clusters" not in line:
-        #         print(f"Points descended:{progress_counter}",end="\r",flush=True)
-        #     else:
-        #         print(str(line.strip), end='\r')
-        # if line != b"":
-        #     print(line)
-        # else:
-        #     print(cp.returncode)
+    re_indexed = np.zeros(final_index.shape)
+    for i,c in enumerate(set(final_index)):
+        re_indexed[final_index == c] = i
 
-    print("Broke loop")
+    plt.figure()
+    plt.title("Clustering Visualization")
+    plt.scatter(tc[:,0],tc[:,1],s=1,c=re_indexed,cmap='rainbow')
+    plt.show()
 
-    for line in progress_temp.readlines():
-        print(line)
-
-    # print(cp.stdout.read())
-
-    if command == "density":
-        return(list([float(x) for x in cp.stdout.read().split()]))
-    if command == "fitpredict":
-        return(list(map(lambda x: int(x),cp.stdout.read().split())))
-
-    print("Invalid command, please specify fitpredict or density")
+    return re_indexed
