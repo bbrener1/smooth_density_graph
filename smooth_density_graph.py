@@ -32,7 +32,7 @@ def sub_knn(mtx,sub=.5,n=10,intercon=10,metric='cosine'):
     return connectivity
 
 
-def fit_transform(mtx,cycles=10,sub=.3,n=10,metric='cosine',intercon=10,coordinates=None):
+def fit_transform(mtx,cycles=10,sub=.3,n=10,metric='cosine',intercon=10,coordinates=None,no_plot=False):
     connectivity = sub_knn(mtx,sub=.5,intercon=intercon,n=n,metric=metric)
     final_index = -1 * np.ones(mtx.shape[0],dtype=int)
     density_estimate = np.ones(mtx.shape[0])
@@ -44,10 +44,11 @@ def fit_transform(mtx,cycles=10,sub=.3,n=10,metric='cosine',intercon=10,coordina
 
     density = np.sum(running_connectivity,axis=0)
 
-    if coordinates is None:
-        tc = TSNE().fit_transform(mtx)
-    else:
-        tc = coordinates
+    if not no_plot:
+        if coordinates is None:
+            tc = TSNE().fit_transform(mtx)
+        else:
+            tc = coordinates
 
     plt.figure()
     plt.title("Density Estimate")
@@ -94,9 +95,10 @@ def fit_transform(mtx,cycles=10,sub=.3,n=10,metric='cosine',intercon=10,coordina
     for i,c in enumerate(set(final_index)):
         re_indexed[final_index == c] = i
 
-    plt.figure()
-    plt.title("Clustering Visualization")
-    plt.scatter(tc[:,0],tc[:,1],s=1,c=re_indexed,cmap='rainbow')
-    plt.show()
+    if not no_plot:
+        plt.figure()
+        plt.title("Clustering Visualization")
+        plt.scatter(tc[:,0],tc[:,1],s=1,c=re_indexed,cmap='rainbow')
+        plt.show()
 
     return re_indexed
