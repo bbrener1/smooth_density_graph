@@ -56,10 +56,10 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
         else:
             tc = coordinates
 
-    plt.figure()
-    plt.title("Density Estimate")
-    plt.scatter(tc[:,0],tc[:,1],s=1,c=np.log(density + 1))
-    plt.show()
+        plt.figure()
+        plt.title("Density Estimate")
+        plt.scatter(tc[:,0],tc[:,1],s=1,c=np.log(density + 1))
+        plt.show()
 
     density_ranked_samples = np.argsort(density)
 
