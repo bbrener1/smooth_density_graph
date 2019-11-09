@@ -40,7 +40,7 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',intercon=10,coordinate
     running_connectivity = np.identity(mtx.shape[0])
     for i in range(cycles):
         print(f"Estimating density:{i}")
-        running_connectivity = np.dot(running_connectivity,skc[i%connectivity.shape[0]])
+        running_connectivity = np.dot(running_connectivity,connectivity[i%connectivity.shape[0]])
 
     density = np.sum(running_connectivity,axis=0)
 
