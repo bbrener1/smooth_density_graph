@@ -58,7 +58,7 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',intercon=10,coordinate
 
     density_ranked_samples = np.argsort(density)
 
-    fully_connected = knn(mtx,n,metric=metric)
+    fully_connected = knn(mtx,k,metric=metric)
     fully_connected = np.logical_or(fully_connected,np.any(connectivity,axis=0))
 
     def ascend(index,connectivity,density,cache):
