@@ -109,5 +109,16 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
 
     return re_indexed
 
-    def rust_fit_predict(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs):
-        return rust_fit_predict_reexport(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs)
+    def rust_fit_predict(targets,command="fitpredict",auto=True,no_plot=False,precomputed=False,verbose=False,backtrace=False,**kwargs):
+
+        labels =  rust_fit_predict_reexport(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs)
+
+        if not no_plot:
+            tc = TSNE().fit_transform(mtx)
+
+            plt.figure()
+            plt.title("Density Estimate")
+            plt.scatter(tc[:,0],tc[:,1],s=1,c=labels )
+            plt.show()
+
+        return labels
