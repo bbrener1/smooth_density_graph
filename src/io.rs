@@ -111,7 +111,7 @@ impl Parameters {
                 "-steps" => {
                     arg_struct.steps = args.next().map(|x| x.parse::<usize>()).expect("step parse error. Not a number?").expect("Iteration error")
                 },
-                "-d" | "-distance" => {
+                "-d" | "-distance" | "-m" | "-metric" => {
                     arg_struct.distance = args.next().map(|x| Distance::parse(&x)).expect("Distance parse error")
                 },
                 "-dm" | "-distance_matrix" => {

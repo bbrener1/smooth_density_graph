@@ -2,10 +2,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
+from smooth_density_graph_rs import fit_predict as rust_fit_predict_reexport
+
 from scipy.spatial.distance import pdist, squareform
 
-def knn(mtx,k,metric='cosine'):
-    dist = squareform(pdist(mtx,metric=metric))
+def knn(mtx,k,metric='cosine',precomputed=None):
+    if precomputed is None:
+        dist = squareform(pdist(mtx,metric=metric))
+    else:
+        dist = precomputed
 
     ranks = np.zeros((mtx.shape[0],mtx.shape[0]),dtype=int)
     for i in range(mtx.shape[0]):
@@ -15,14 +20,14 @@ def knn(mtx,k,metric='cosine'):
     return boolean
 
 
-def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine'):
+def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None):
     intercon = 10
     connectivity = np.zeros((intercon,mtx.shape[0],mtx.shape[0]),dtype=bool)
     for i in range(intercon):
         mask = np.random.random(mtx.shape[0]) < sub
         double_mask = np.outer(mask,mask)
         sub_mtx = mtx[mask]
-        sub_connectivity = knn(sub_mtx,k,metric=metric)
+        sub_connectivity = knn(sub_mtx,k,metric=metric,precomputed=precomputed)
         connectivity[i][double_mask] = sub_connectivity.flatten()
 
     for i in range(0,1000000,11):
@@ -33,8 +38,8 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine'):
     return connectivity
 
 
-def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',intercon=10,coordinates=None,no_plot=False):
-    connectivity = sub_knn(mtx,sub=.5,intercon=intercon,k=k,metric=metric)
+def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,intercon=10,coordinates=None,no_plot=False):
+    connectivity = sub_knn(mtx,sub=.5,intercon=intercon,k=k,metric=metric,precomputed=precomputed)
     final_index = -1 * np.ones(mtx.shape[0],dtype=int)
     density_estimate = np.ones(mtx.shape[0])
 
@@ -103,3 +108,6 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',intercon=10,coordinate
         plt.show()
 
     return re_indexed
+
+    def rust_fit_predict(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs):
+        return rust_fit_predict_reexport(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs)
