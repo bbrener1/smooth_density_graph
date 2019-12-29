@@ -45,8 +45,9 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
 
     running_connectivity = np.identity(mtx.shape[0])
     for i in range(cycles):
-        print(f"Estimating density:{i}")
+        print(f"Estimating density:{100*(float(i+1)/cycles)}%",end='\r')
         running_connectivity = np.dot(running_connectivity,connectivity[i%connectivity.shape[0]])
+    print("")
 
     density = np.sum(running_connectivity,axis=0)
 
@@ -87,18 +88,28 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
 
     for i,sample in enumerate(density_ranked_samples):
         if i%100 == 0:
-            print(f"Routing sample: {i}")
+            print(f"Routing samples: {100*(float(i+1)/len(density_ranked_samples))}%", end='\r')
         destination,history = ascend(sample,fully_connected,density,final_index)
         final_index[sample] = destination
         final_index[np.array(history,dtype=int)] = destination
-
+    print("")
 
     print("Final clusters:")
-    for final_cluster in set(final_index):
-        print(final_cluster,np.sum(final_index == final_cluster))
+    final_clusters = list(set(final_index))
+    final_cluster_sizes = [np.sum(final_index == cluster) for cluster in final_clusters]
+    final_clusters_sorted = list(reversed(list(np.array(final_clusters)[np.argsort(final_cluster_sizes)])))
+
+    plt.figure()
+    plt.title("Distribution of Cluster Sizes")
+    plt.bar(np.arange(len(final_clusters)),list(reversed(sorted(final_cluster_sizes))))
+    plt.show()
+
+    # for final_cluster in set(final_index):
+    #     print(final_cluster,np.sum(final_index == final_cluster))
+    print(f"Total clusters:{len(set(final_index))}")
 
     re_indexed = np.zeros(final_index.shape)
-    for i,c in enumerate(set(final_index)):
+    for i,c in enumerate(final_clusters_sorted):
         re_indexed[final_index == c] = i
 
     if not no_plot:
