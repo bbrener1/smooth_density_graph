@@ -27,7 +27,10 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None):
         mask = np.random.random(mtx.shape[0]) < sub
         double_mask = np.outer(mask,mask)
         sub_mtx = mtx[mask]
-        sub_connectivity = knn(sub_mtx,k,metric=metric,precomputed=precomputed)
+        if precomputed is not None:
+            sub_connectivity = knn(sub_mtx,k,metric=metric,precomputed=precomputed[mask].T[mask].T)
+        else:
+            sub_connectivity = knn(sub_mtx,k,metric=metric)
         connectivity[i][double_mask] = sub_connectivity.flatten()
 
     for i in range(0,1000000,11):
@@ -39,7 +42,11 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None):
 
 
 def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,intercon=10,coordinates=None,no_plot=False):
-    connectivity = sub_knn(mtx,sub=.5,intercon=intercon,k=k,metric=metric,precomputed=precomputed)
+    if precomputed is None:
+        distance_mtx = squareform(pdist(mtx,metric=metric))
+    else:
+        distance_mtx = precomputed
+    connectivity = sub_knn(mtx,sub=sub,intercon=intercon,k=k,metric=metric,precomputed=distance_mtx)
     final_index = -1 * np.ones(mtx.shape[0],dtype=int)
     density_estimate = np.ones(mtx.shape[0])
 
@@ -53,7 +60,7 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
 
     if not no_plot:
         if coordinates is None:
-            tc = TSNE().fit_transform(mtx)
+            tc = TSNE(metric='precomputed').fit_transform(distance_mtx)
         else:
             tc = coordinates
 
@@ -64,7 +71,7 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
 
     density_ranked_samples = np.argsort(density)
 
-    fully_connected = knn(mtx,k,metric=metric)
+    fully_connected = knn(mtx,k,metric=metric,precomputed=distance_mtx)
     fully_connected = np.logical_or(fully_connected,np.any(connectivity,axis=0))
 
     def ascend(index,connectivity,density,cache):
