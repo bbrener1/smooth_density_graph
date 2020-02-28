@@ -41,7 +41,11 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None):
     return connectivity
 
 
-def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,intercon=10,coordinates=None,no_plot=False):
+def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,intercon=10,coordinates=None,no_plot=False,rust=False,**kwargs):
+
+    if rust:
+        return rust_fit_predict(mtx,no_plot=no_plot,precomputed=bool(precomputed),k=k,**kwargs)
+
     if precomputed is None:
         distance_mtx = squareform(pdist(mtx,metric=metric))
     else:
@@ -127,16 +131,30 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
 
     return re_indexed
 
-    def rust_fit_predict(targets,command="fitpredict",auto=True,no_plot=False,precomputed=False,verbose=False,backtrace=False,**kwargs):
+# def fit_predict(targets,command="fitpredict",auto=True,no_plot=False,precomputed=False,verbose=False,backtrace=False,**kwargs):
+#
+#     labels =  rust_fit_predict_reexport(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs)
+#
+#     if not no_plot:
+#         tc = TSNE().fit_transform(mtx)
+#
+#         plt.figure()
+#         plt.title("Density Estimate")
+#         plt.scatter(tc[:,0],tc[:,1],s=1,c=labels )
+#         plt.show()
+#
+#     return labels
 
-        labels =  rust_fit_predict_reexport(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs)
+def rust_fit_predict(targets,command="fitpredict",auto=True,no_plot=False,precomputed=False,verbose=False,backtrace=False,**kwargs):
 
-        if not no_plot:
-            tc = TSNE().fit_transform(mtx)
+    labels =  rust_fit_predict_reexport(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs)
 
-            plt.figure()
-            plt.title("Density Estimate")
-            plt.scatter(tc[:,0],tc[:,1],s=1,c=labels )
-            plt.show()
+    if not no_plot:
+        tc = TSNE().fit_transform(mtx)
 
-        return labels
+        plt.figure()
+        plt.title("Density Estimate")
+        plt.scatter(tc[:,0],tc[:,1],s=1,c=labels )
+        plt.show()
+
+    return labels
