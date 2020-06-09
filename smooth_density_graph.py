@@ -7,17 +7,21 @@ from smooth_density_graph_rs import fit_predict as rust_fit_predict_reexport
 from scipy.spatial.distance import pdist, squareform
 
 def knn(mtx,k,metric='cosine',precomputed=None):
+    from sklearn.neighbors import NearestNeighbors
     if precomputed is None:
         dist = squareform(pdist(mtx,metric=metric))
     else:
         dist = precomputed
 
-    ranks = np.zeros((mtx.shape[0],mtx.shape[0]),dtype=int)
-    for i in range(mtx.shape[0]):
-        ranks[i][np.argsort(dist[i])] = np.arange(dist.shape[1])
-    boolean = ranks < (k+1)
-    boolean[np.identity(boolean.shape[0],dtype=bool)] = False
-    return boolean
+    nbrs = NearestNeighbors(n_neighbors=k,metric='precomputed', algorithm='auto').fit(dist)
+    return nbrs.kneighbors_graph().toarray()
+    
+    # ranks = np.zeros((mtx.shape[0],mtx.shape[0]),dtype=int)
+    # for i in range(mtx.shape[0]):
+    #     ranks[i][np.argsort(dist[i])] = np.arange(dist.shape[1])
+    # boolean = ranks < (k+1)
+    # boolean[np.identity(boolean.shape[0],dtype=bool)] = False
+    # return boolean
 
 
 def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None):
