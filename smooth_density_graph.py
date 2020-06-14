@@ -25,7 +25,6 @@ def knn(mtx,k,metric='cosine',precomputed=None):
 
 
 def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle=3):
-    intercon = 10
     connectivity = np.zeros((intercon,mtx.shape[0],mtx.shape[0]),dtype=bool)
 
     for i in range(intercon):
@@ -41,7 +40,7 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle
 
     print("Shuffling")
 
-    shuffle_range = (connectivity.shape[1] / 11) * connectivity.shape[1]
+    shuffle_range = np.round((connectivity.shape[1] / 11) * connectivity.shape[1])
 
     print(f"Shuffle range: {shuffle_range}")
 
@@ -64,6 +63,7 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
         distance_mtx = precomputed
 
     print("Distances ready")
+
 
     connectivity = sub_knn(mtx,sub=sub,intercon=intercon,k=k,metric=metric,precomputed=distance_mtx,shuffle=shuffle)
     final_index = -1 * np.ones(mtx.shape[0],dtype=int)
