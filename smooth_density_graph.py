@@ -24,7 +24,7 @@ def knn(mtx,k,metric='cosine',precomputed=None):
     # return boolean
 
 
-def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle=1000000):
+def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle=3):
     intercon = 10
     connectivity = np.zeros((intercon,mtx.shape[0],mtx.shape[0]),dtype=bool)
 
@@ -41,7 +41,9 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle
 
     print("Shuffling")
 
-    for i in range(0,shuffle,11):
+    shuffle_range = np.round(connectivity.shape[1] / 11) * shuffle
+
+    for i in range(0,shuffle_range,11):
         segment_x = i%connectivity.shape[1]
         segment_y = (int(i/connectivity.shape[1]))%connectivity.shape[2]
         np.random.shuffle(connectivity[:,segment_x:segment_x+37,segment_y:segment_y+37])
@@ -49,7 +51,7 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle
     return connectivity
 
 
-def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,intercon=10,coordinates=None,no_plot=False,rust=False,shuffle=1000000,**kwargs):
+def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,intercon=10,coordinates=None,no_plot=False,rust=False,shuffle=3,**kwargs):
 
     if rust:
         return rust_fit_predict(mtx,no_plot=no_plot,precomputed=bool(precomputed),k=k,**kwargs)
