@@ -15,7 +15,7 @@ def knn(mtx,k,metric='cosine',precomputed=None):
 
     nbrs = NearestNeighbors(n_neighbors=k,metric='precomputed', algorithm='auto').fit(dist)
     return nbrs.kneighbors_graph().toarray()
-    
+
     # ranks = np.zeros((mtx.shape[0],mtx.shape[0]),dtype=int)
     # for i in range(mtx.shape[0]):
     #     ranks[i][np.argsort(dist[i])] = np.arange(dist.shape[1])
@@ -24,10 +24,12 @@ def knn(mtx,k,metric='cosine',precomputed=None):
     # return boolean
 
 
-def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None):
+def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle=1000000):
     intercon = 10
     connectivity = np.zeros((intercon,mtx.shape[0],mtx.shape[0]),dtype=bool)
+
     for i in range(intercon):
+        print(f"Subsampling connectivity: {i}")
         mask = np.random.random(mtx.shape[0]) < sub
         double_mask = np.outer(mask,mask)
         sub_mtx = mtx[mask]
@@ -37,7 +39,9 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None):
             sub_connectivity = knn(sub_mtx,k,metric=metric)
         connectivity[i][double_mask] = sub_connectivity.flatten()
 
-    for i in range(0,1000000,11):
+    print("Shuffling")
+
+    for i in range(0,,11,shuffle):
         segment_x = i%connectivity.shape[1]
         segment_y = (int(i/connectivity.shape[1]))%connectivity.shape[2]
         np.random.shuffle(connectivity[:,segment_x:segment_x+37,segment_y:segment_y+37])
@@ -45,7 +49,7 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None):
     return connectivity
 
 
-def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,intercon=10,coordinates=None,no_plot=False,rust=False,**kwargs):
+def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,intercon=10,coordinates=None,no_plot=False,rust=False,shuffle=1000000,**kwargs):
 
     if rust:
         return rust_fit_predict(mtx,no_plot=no_plot,precomputed=bool(precomputed),k=k,**kwargs)
@@ -54,7 +58,10 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
         distance_mtx = squareform(pdist(mtx,metric=metric))
     else:
         distance_mtx = precomputed
-    connectivity = sub_knn(mtx,sub=sub,intercon=intercon,k=k,metric=metric,precomputed=distance_mtx)
+
+    print("Distances ready")
+
+    connectivity = sub_knn(mtx,sub=sub,intercon=intercon,k=k,metric=metric,precomputed=distance_mtx,shuffle=shuffle)
     final_index = -1 * np.ones(mtx.shape[0],dtype=int)
     density_estimate = np.ones(mtx.shape[0])
 
