@@ -41,7 +41,7 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle
 
     print("Shuffling")
 
-    for i in range(0,,11,shuffle):
+    for i in range(0,shuffle,11):
         segment_x = i%connectivity.shape[1]
         segment_y = (int(i/connectivity.shape[1]))%connectivity.shape[2]
         np.random.shuffle(connectivity[:,segment_x:segment_x+37,segment_y:segment_y+37])
