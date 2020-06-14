@@ -41,7 +41,9 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle
 
     print("Shuffling")
 
-    shuffle_range = np.round(connectivity.shape[1] / 11) * shuffle
+    shuffle_range = (connectivity.shape[1] / 11) * connectivity.shape[1]
+
+    print(f"Shuffle range: {shuffle_range}")
 
     for i in range(0,shuffle_range,11):
         segment_x = i%connectivity.shape[1]
