@@ -40,7 +40,7 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle
 
     print("Shuffling")
 
-    shuffle_range = np.round((connectivity.shape[1] / 11) * connectivity.shape[1])
+    shuffle_range = int((connectivity.shape[1] / 11) * connectivity.shape[1])
 
     print(f"Shuffle range: {shuffle_range}")
 
