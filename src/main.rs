@@ -17,6 +17,7 @@ extern crate rayon;
 mod io;
 mod clustering;
 mod connection_density;
+mod triangulate;
 
 use io::Parameters;
 use io::Command;
