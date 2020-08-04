@@ -15,21 +15,22 @@ use std::hash::Hash;
 use std::cmp::Eq;
 use std::cmp::Ordering;
 
-struct SparseDistance {
+pub struct SparseDistance {
     elements: Array2<f64>,
     distance_metric: Distance,
     k: usize,
+    sub: f64,
     anchor: usize,
     anchor_threshold: usize,
     distances: HashMap<(usize,usize),f64>,
     rankings: HashMap<usize,Vec<usize>>,
-    density: Array1<usize>,
+    pub density: Array1<usize>,
     available: HashSet<usize>,
 
 }
 
 impl SparseDistance {
-    fn new(elements:Array2<f64>,k:usize,distance_metric:Distance,optimization:Optimization) -> SparseDistance {
+    pub fn new(elements:Array2<f64>,k:usize,sub:f64,distance_metric:Distance) -> SparseDistance {
 
         let n = elements.dim().0;
 
@@ -40,17 +41,21 @@ impl SparseDistance {
         let density = Array1::zeros(n);
         let available: HashSet<usize> = (0..n).collect();
 
-        SparseDistance {
+        let mut sd = SparseDistance {
             elements,
             distance_metric,
             k,
+            sub,
             anchor,
             anchor_threshold,
             distances,
             rankings,
             density,
             available,
-        }
+        };
+
+        sd.reanchor(0);
+        sd
     }
 
     fn n(&self) -> usize {
@@ -58,6 +63,9 @@ impl SparseDistance {
     }
 
     fn distance(&mut self,p1:usize,p2:usize) -> f64 {
+        if p1 == p2 {
+            return std::f64::MAX;
+        }
         if self.distances.contains_key(&(p1,p2)) {
             self.distances[&(p1,p2)]
         }
@@ -74,19 +82,30 @@ impl SparseDistance {
     }
 
     fn reanchor(&mut self, new_anchor:usize) {
-        if !self.rankings.contains_key(&new_anchor) {
-            let distances: Vec<f64> = (0..self.n())
-                .map(|p2|
-                    self.distance(new_anchor,p2)
-                )
-                .collect();
-            let rankings = argsort(&distances);
-            self.rankings.insert(new_anchor,rankings);
+        let subsample: Vec<usize> =
+            rand::thread_rng()
+            .sample_iter(
+                &Uniform::new(0,self.n())
+            )
+            .take((self.n() as f64 * self.sub) as usize)
+            .collect();
+
+        let distances: Vec<f64> = subsample.iter()
+            .map(|p2|
+                self.distance(new_anchor,*p2)
+            )
+            .collect();
+
+        let mut local_rankings = argsort(&distances);
+        let mut rankings: Vec<usize> = local_rankings.into_iter().map(|i| subsample[i]).collect();
+        if rankings[0] == new_anchor {
+            rankings.remove(0);
         }
+        self.rankings.insert(new_anchor,rankings);
         self.anchor = new_anchor;
     }
 
-    fn triangulate(&mut self) -> Array2<usize> {
+    pub fn triangulate(&mut self) -> &HashMap<usize,Vec<usize>> {
 
         let mut current = 0;
 
@@ -102,7 +121,7 @@ impl SparseDistance {
                 })
                 .collect();
 
-            let neighborhood_rankings = k_min(self.k,&neighborhood_distances);
+            let mut neighborhood_rankings = k_min(self.k,&neighborhood_distances);
 
             let worst_neighbor =
                 neighborhood_distances[*neighborhood_rankings.last().unwrap()];
@@ -111,13 +130,18 @@ impl SparseDistance {
                 self.reanchor(current)
             }
             else {
-                let neighborhood_indices: Vec<usize> =
+                let mut neighborhood_indices: Vec<usize> =
                     neighborhood_rankings
                     .iter()
                     .map(|n_r|
                         self.rankings[&self.anchor][*n_r]
                     )
                     .collect();
+
+                if let Some((i,n)) = neighborhood_indices.iter().enumerate().find(|(i,n)| **n == current) {
+                    neighborhood_indices.remove(i);
+                }
+
                 self.rankings.entry(current).or_insert(neighborhood_indices);
             }
 
@@ -130,31 +154,41 @@ impl SparseDistance {
                 }
             }
 
-        }
+            // eprintln!("{:?} remaining",self.available.len());
+            // eprintln!("{:?}",self.rankings.len());
 
-        Array2::zeros((0,0))
+        }
+        // eprintln!("ranked:{:?}",self.rankings)
+        &self.rankings
     }
 
     fn estimate_density(&mut self,subsample:f64) {
 
         let mut rng = rand::thread_rng();
 
-        for _ in 0..5 {
+        for _ in 0..20 {
 
             let subsample: Vec<usize> =
                 rng
                 .sample_iter(
-                    &Uniform::new_inclusive(0, self.n())
+                    &Uniform::new(0,self.n())
                 )
                 .take((self.n() as f64 * subsample) as usize)
                 .collect();
 
             let subset: HashSet<usize> = subsample.iter().cloned().collect();
 
+            // eprintln!("subset:{:?}",subset);
+
             for sample in &subset {
-                let neighbors = &self.rankings[&sample];
+
+                // eprintln!("sample:{:?}",sample);
+
+                let neighbors = &self.rankings[&sample][..self.k-1];
 
                 for neighbor in neighbors {
+                    // eprintln!("neighbor:{:?}",neighbor);
+                    // self.density[*neighbor] += 1;
                     if subset.contains(neighbor) {
                         self.density[*neighbor] += 1;
                     }
@@ -163,7 +197,27 @@ impl SparseDistance {
             }
 
         }
+
+        eprintln!("Density estimate {:?}",self.density);
     }
+    //
+    // fn estimate_density(&mut self,subsample:f64) {
+    //
+    //     let mut rng = rand::thread_rng();
+    //
+    //     for _ in 0..self.n() {
+    //
+    //         let mut current = rng.gen_range(0,self.n());
+    //
+    //         for _ in 0..1000 {
+    //             self.density[[current]] += 1;
+    //             let neighbors = &self.rankings[&current];
+    //             current = neighbors[rng.gen_range(0,neighbors.len())];
+    //         }
+    //     }
+    //
+    //     eprintln!("Density estimate {:?}",self.density);
+    // }
 
     fn ascend_density(&self) -> Array1<i32> {
         let mut final_index: Array1<i32> = Array1::zeros(self.n()) - 1;
@@ -171,15 +225,15 @@ impl SparseDistance {
         let mut current = 0;
         for i in 0..self.n() {
             current = i;
-            'a: for i in 0..self.n() {
-                let neighbors = &self.rankings[&current][..self.anchor_threshold];
+            'a: for _ in 0..self.n() {
+                let neighbors = &self.rankings[&current][..self.k-1];
                 let neighbor_densities = neighbors.into_iter().map(|n_i| self.density[[*n_i]]);
                 let densest_neighbor = neighbors[argmax(neighbor_densities).unwrap()];
                 if final_index[densest_neighbor] != -1 {
                     final_index[i] = final_index[densest_neighbor];
                     break 'a
                 }
-                else if self.density[densest_neighbor] < self.density[current]{
+                else if self.density[densest_neighbor] <= self.density[current]{
                     final_index[i] = current as i32;
                     break 'a
                 }
@@ -193,6 +247,15 @@ impl SparseDistance {
         }
 
         final_index
+    }
+
+    pub fn cluster(&mut self) -> Array1<i32> {
+        eprintln!("Computing neighbors");
+        self.triangulate();
+        eprintln!("Estimating density");
+        self.estimate_density(self.sub);
+        eprintln!("Ascending");
+        self.ascend_density()
     }
 
 }
