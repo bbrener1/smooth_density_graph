@@ -165,17 +165,31 @@ impl SparseDistance {
         }
     }
 
-    fn ascend_density(&self) -> Array1<usize> {
-        let mut final_index = Array1::zeros(self.n());
+    fn ascend_density(&self) -> Array1<i32> {
+        let mut final_index: Array1<i32> = Array1::zeros(self.n()) - 1;
 
+        let mut current = 0;
         for i in 0..self.n() {
-            let mut current = i;
-            loop {
-                let neighbors = &self.rankings[&current];
+            current = i;
+            'a: for i in 0..self.n() {
+                let neighbors = &self.rankings[&current][..self.anchor_threshold];
                 let neighbor_densities = neighbors.into_iter().map(|n_i| self.density[[*n_i]]);
-
-
+                let densest_neighbor = neighbors[argmax(neighbor_densities).unwrap()];
+                if final_index[densest_neighbor] != -1 {
+                    final_index[i] = final_index[densest_neighbor];
+                    break 'a
+                }
+                else if self.density[densest_neighbor] < self.density[current]{
+                    final_index[i] = current as i32;
+                    break 'a
+                }
+                else {current = densest_neighbor}
             }
+            if final_index[i] == -1 {
+                panic!(format!["{:?} Failed to converge!",i])
+                // final_index[i] = current as i32;
+            }
+
         }
 
         final_index
