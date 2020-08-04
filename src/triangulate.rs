@@ -72,3 +72,24 @@ fn k_min(k:usize,vec: &[f64]) -> Vec<usize> {
 
     queue.iter().map(|(x,y)| *x).collect()
 }
+
+pub fn argmax<T:Iterator<Item=U>,U:PartialOrd + PartialEq>(input: T) -> Option<usize> {
+    let mut maximum: Option<(usize,U)> = None;
+    for (j,val) in input.enumerate() {
+        let check =
+            if let Some((i,m)) = maximum.take() {
+                match val.partial_cmp(&m).unwrap_or(Ordering::Less) {
+                    Ordering::Less => {Some((i,m))},
+                    Ordering::Equal => {Some((i,m))},
+                    Ordering::Greater => {Some((j,val))},
+                }
+            }
+            else {
+                if val.partial_cmp(&val).is_some() { Some((j,val)) }
+                else { None }
+            };
+        maximum = check;
+
+    };
+    maximum.map(|(i,_)| i)
+}
