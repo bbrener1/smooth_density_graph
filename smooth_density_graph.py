@@ -10,19 +10,19 @@ from scipy.spatial.distance import pdist, squareform
 
 def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',shuffle=3):
 
-    connectivity = np.zeros((intercon,mtx.shape[0],mtx.shape[0]),dtype=bool)
+    connectivity = np.zeros((intercon,mtx.shape[0],k),dtype=bool)
 
     for i in range(intercon):
         print(f"Subsampling connectivity: {i}")
         mask = np.random.random(mtx.shape[0]) < sub
         double_mask = np.outer(mask,mask)
         sub_mtx = mtx[mask]
-        sub_connectivity = dense_neighbors(fast_knn(sub_mtx,k,metric=metric))
+        sub_connectivity = fast_knn(sub_mtx,k,metric=metric)
         connectivity[i][double_mask] = sub_connectivity.flatten()
 
     print("Shuffling")
 
-    shuffle_range = int((connectivity.shape[1] / 11) * connectivity.shape[1])
+    shuffle_range = int((connectivity.shape[1] / 11) * connectivity.shape[2])
 
     print(f"Shuffle range: {shuffle_range}")
 
@@ -41,15 +41,12 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
 
     connectivity = sub_knn(mtx,sub=sub,intercon=intercon,k=k,metric=metric,shuffle=shuffle)
     final_index = -1 * np.ones(mtx.shape[0],dtype=int)
-    density_estimate = np.ones(mtx.shape[0])
+    density = np.ones(mtx.shape[0])
 
-    running_connectivity = np.identity(mtx.shape[0])
     for i in range(cycles):
         print(f"Estimating density:{100*(float(i+1)/cycles)}%",end='\r')
-        running_connectivity = np.dot(running_connectivity,connectivity[i%connectivity.shape[0]])
+        density = np.sum(density[(np.arange(connectivity.shape[1]]),connectivity[i%connectivity.shape[0]].T)],axis=0) + density
     print("")
-
-    density = np.sum(running_connectivity,axis=0)
 
     if not no_plot:
         if coordinates is None:
