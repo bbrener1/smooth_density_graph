@@ -6,25 +6,10 @@ from smooth_density_graph_rs import fit_predict as rust_fit_predict_reexport
 
 from scipy.spatial.distance import pdist, squareform
 
-def knn(mtx,k,metric='cosine',precomputed=None):
-    from sklearn.neighbors import NearestNeighbors
-    if precomputed is None:
-        dist = squareform(pdist(mtx,metric=metric))
-    else:
-        dist = precomputed
-
-    nbrs = NearestNeighbors(n_neighbors=k,metric='precomputed', algorithm='auto').fit(dist)
-    return nbrs.kneighbors_graph().toarray()
-
-    # ranks = np.zeros((mtx.shape[0],mtx.shape[0]),dtype=int)
-    # for i in range(mtx.shape[0]):
-    #     ranks[i][np.argsort(dist[i])] = np.arange(dist.shape[1])
-    # boolean = ranks < (k+1)
-    # boolean[np.identity(boolean.shape[0],dtype=bool)] = False
-    # return boolean
 
 
-def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle=3):
+def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',shuffle=3):
+
     connectivity = np.zeros((intercon,mtx.shape[0],mtx.shape[0]),dtype=bool)
 
     for i in range(intercon):
@@ -32,10 +17,7 @@ def sub_knn(mtx,sub=.5,k=10,intercon=10,metric='cosine',precomputed=None,shuffle
         mask = np.random.random(mtx.shape[0]) < sub
         double_mask = np.outer(mask,mask)
         sub_mtx = mtx[mask]
-        if precomputed is not None:
-            sub_connectivity = knn(sub_mtx,k,metric=metric,precomputed=precomputed[mask].T[mask].T)
-        else:
-            sub_connectivity = knn(sub_mtx,k,metric=metric)
+        sub_connectivity = dense_neighbors(fast_knn(sub_mtx,k,metric=metric))
         connectivity[i][double_mask] = sub_connectivity.flatten()
 
     print("Shuffling")
@@ -57,15 +39,7 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
     if rust:
         return rust_fit_predict(mtx,no_plot=no_plot,precomputed=bool(precomputed),k=k,**kwargs)
 
-    if precomputed is None:
-        distance_mtx = squareform(pdist(mtx,metric=metric))
-    else:
-        distance_mtx = precomputed
-
-    print("Distances ready")
-
-
-    connectivity = sub_knn(mtx,sub=sub,intercon=intercon,k=k,metric=metric,precomputed=distance_mtx,shuffle=shuffle)
+    connectivity = sub_knn(mtx,sub=sub,intercon=intercon,k=k,metric=metric,shuffle=shuffle)
     final_index = -1 * np.ones(mtx.shape[0],dtype=int)
     density_estimate = np.ones(mtx.shape[0])
 
@@ -146,19 +120,7 @@ def fit_predict(mtx,cycles=10,sub=.3,k=10,metric='cosine',precomputed=None,inter
 
     return re_indexed
 
-# def fit_predict(targets,command="fitpredict",auto=True,no_plot=False,precomputed=False,verbose=False,backtrace=False,**kwargs):
-#
-#     labels =  rust_fit_predict_reexport(targets,command="fitpredict",auto=True,precomputed=False,verbose=False,backtrace=False,**kwargs)
-#
-#     if not no_plot:
-#         tc = TSNE().fit_transform(mtx)
-#
-#         plt.figure()
-#         plt.title("Density Estimate")
-#         plt.scatter(tc[:,0],tc[:,1],s=1,c=labels )
-#         plt.show()
-#
-#     return labels
+
 
 def rust_fit_predict(targets,command="fitpredict",auto=True,no_plot=False,precomputed=False,verbose=False,backtrace=False,**kwargs):
 
@@ -173,3 +135,73 @@ def rust_fit_predict(targets,command="fitpredict",auto=True,no_plot=False,precom
         plt.show()
 
     return labels
+
+from scipy.spatial.distance import pdist,cdist,squareform
+
+def fast_knn(elements, k, neighborhood_fraction=.01, metric='cosine'):
+
+    nearest_neighbors = np.zeros((elements.shape[0], k), dtype=int)
+    guarantee = np.zeros(elements.shape[0], dtype=bool)
+
+    neighborhood_size = max(
+        k * 3, int(elements.shape[0] * neighborhood_fraction))
+    anchor_loops = 0
+
+    while np.sum(guarantee) < guarantee.shape[0]:
+
+        anchor_loops += 1
+
+        available = np.arange(guarantee.shape[0])[~guarantee]
+        np.random.shuffle(available)
+        anchors = available[:int(guarantee.shape[0] / neighborhood_size) * 3]
+
+        for anchor in anchors:
+            print(f"Complete:{np.sum(guarantee)}\r", end='')
+
+            anchor_distances = cdist(elements[anchor].reshape(
+                1, -1), elements, metric=metric)[0]
+
+            neighborhood = np.argpartition(anchor_distances, neighborhood_size)[
+                :neighborhood_size]
+            anchor_local = np.where(neighborhood == anchor)[0]
+
+            local_distances = squareform(
+                pdist(elements[neighborhood], metric=metric))
+            local_distances[np.identity(
+                local_distances.shape[0], dtype=bool)] = float('inf')
+
+            anchor_distances = local_distances[anchor_local]
+
+            for i, sample in enumerate(neighborhood):
+                if not guarantee[sample]:
+
+                    best_neighbors_local = np.argpartition(
+                        local_distances[i], k)
+                    best_neighbors = neighborhood[best_neighbors_local[:k]]
+
+                    worst_best_local = best_neighbors_local[k]
+                    worst_best_local_distance = local_distances[i,
+                                                                worst_best_local]
+
+                    worst_local = np.argmax(local_distances[i])
+                    anchor_to_worst = local_distances[anchor_local,
+                                                      worst_local]
+
+                    anchor_distance = local_distances[anchor_local, i]
+
+                    criterion_distance = anchor_to_worst - anchor_distance
+
+                    if worst_best_local_distance <= criterion_distance:
+                        continue
+                    else:
+                        nearest_neighbors[sample] = best_neighbors
+                        guarantee[sample] = True
+    print("\n")
+
+    return nearest_neighbors
+
+def dense_neighbors(sparse):
+
+    dense = np.zeros((sparse.shape[0],sparse.shape[0]),dtype=bool)
+    dense[(np.arange(sparse.shape[0]),sparse.T)] = True
+    return dense
